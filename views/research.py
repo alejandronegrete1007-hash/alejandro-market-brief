@@ -201,9 +201,13 @@ def render(sym: str, ctx: dict):
     day = dt.date.today().isoformat()
     try:
         with st.spinner("Writing the note from the numbers on this page..."):
-            t = ai.research_note(sym, facts(ctx),
+            d_ = ctx.get("dcf") or {}
+            # one note per stock, day and set of assumptions: moving prices alone don't spend AI quota again
+            akey = ai.digest(*(f"{d_.get(k_)!s:.8}" for k_ in ("g", "wacc", "ke", "tg", "mult", "margin_target", "erp")),
+                             str(d_.get("probs")))
+            t = ai.research_note(sym, day, akey, facts(ctx),
                                  tuple(f"{n_['source']} | {n_['time']:%b %d} | {n_['title']} — {n_['summary'][:200]}"
-                                       for n_ in news[:10] if n_.get("time")), day)
+                                       for n_ in news[:10] if n_.get("time")))
         st.session_state[key] = True
     except Exception as e:
         st.info(f"The written note isn't available right now ({e}). The numbers above still stand.")

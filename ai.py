@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 
 import requests
 import streamlit as st
@@ -85,12 +86,20 @@ def _read(r) -> dict:
     return json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()).strip())
 
 
+_COOLDOWN = {"until": 0.0}
+LAST: dict = {}  # last good daily brief, shown if a new one can't be written (quota or outage)
+
+
 def _generate(prompt: str, temperature: float = 0.3) -> dict:
     if src.DEMO:
         import demo
         return demo.fake_ai(prompt)
-    last = "no model tried"
-    for model in models()[:4]:  # slow, busy (503), retired (404) or out of quota (429): try the next one
+    if time.time() < _COOLDOWN["until"]:
+        mins = int((_COOLDOWN["until"] - time.time()) // 60) + 1
+        raise AIError(f"Gemini's free quota is used up for the moment; the app will try again in about {mins} min.")
+    last, quota = "no model tried", 0
+    tried = models()[:6]
+    for model in tried:  # slow, busy (503), retired (404) or out of quota (429): try the next one
         try:
             r = _post(model, prompt, temperature, _thinking(model))
             if r.status_code == 400 and _thinking(model):  # model doesn't take that setting
@@ -100,6 +109,7 @@ def _generate(prompt: str, temperature: float = 0.3) -> dict:
             continue
         if r.status_code in (404, 429, 500, 503):
             last = f"{model} returned {r.status_code}"
+            quota += r.status_code == 429
             continue
         if r.status_code >= 400:
             raise AIError(f"Gemini returned an error ({r.status_code}).")
@@ -107,7 +117,10 @@ def _generate(prompt: str, temperature: float = 0.3) -> dict:
             return _read(r)
         except Exception:
             last = f"{model}: unreadable answer"
-    raise AIError(f"Gemini is busy or out of free quota right now ({last}). Try again in a few minutes.")
+    if quota and quota >= len(tried) - 1:  # every model out of quota: stop asking for a while instead of hammering
+        _COOLDOWN["until"] = time.time() + 10 * 60
+        raise AIError("Gemini's free daily quota is used up for the moment; the app will try again in 10 minutes.")
+    raise AIError(f"Gemini is busy right now ({last}). Try again in a few minutes.")
 
 
 STYLE = """Write like a sharp buy-side analyst explaining the market to a smart friend:
@@ -117,8 +130,11 @@ probabilities. If something isn't in the inputs, don't say it."""
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False, max_entries=8)
-def daily_brief(snapshot: str, headlines: tuple[str, ...], stamp: str) -> dict:
-    """`stamp` (date + 6-hour block) makes the brief refresh four times a day at most."""
+def daily_brief(stamp: str, _snapshot: str, _headlines: tuple[str, ...], _refs: tuple = ()) -> dict:
+    """Written at most once per 6-hour block: only `stamp` is part of the cache key (arguments starting
+    with _ are not), so changing prices or new headlines don't trigger a new (quota-consuming) call.
+    `_refs` (url, source, time of each headline) is stored with the brief so its links stay right."""
+    snapshot, headlines = _snapshot, _headlines
     numbered = "\n".join(f"[{i}] {h}" for i, h in enumerate(headlines))
     prompt = f"""{STYLE}
 
@@ -161,20 +177,23 @@ or EWW. "direction" is the likely first reaction implied by the news, not a fore
             s["sources"] = ids
             stories.append(s)
     out["stories"] = stories
+    out["refs"] = list(_refs)
+    out["stamp"] = stamp
+    LAST["brief"] = out
     return out
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner=False, max_entries=30)
-def research_note(symbol: str, facts: str, news: tuple[str, ...], day: str) -> dict:
+def research_note(symbol: str, day: str, key: str, _facts: str, _news: tuple[str, ...]) -> dict:
     """An equity research note built only from the app's data: thesis, valuation, quality, scenarios, risks."""
-    numbered = "\n".join(f"[{i}] {h}" for i, h in enumerate(news)) or "(no recent company news)"
+    numbered = "\n".join(f"[{i}] {h}" for i, h in enumerate(_news)) or "(no recent company news)"
     prompt = f"""{STYLE}
 
 Write a one-page equity research note on {symbol}, the way a buy-side analyst at an asset manager
 would present it to the investment committee. Today is {day}.
 
 DATA AND CALCULATIONS FROM THE APP (treat as facts; the DCF uses the analyst's own assumptions):
-{facts}
+{_facts}
 
 RECENT NEWS:
 {numbered}
@@ -204,7 +223,7 @@ if the data is thin or contradictory, choose "Hold" with "Low" conviction and sa
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner=False, max_entries=8)
-def sector_reads(blocks: str, stamp: str) -> dict:
+def sector_reads(stamp: str, _blocks: str) -> dict:
     """One line and a tone per sector, from that sector's headlines only."""
     prompt = f"""{STYLE}
 
@@ -212,7 +231,7 @@ For each sector below, read ONLY its headlines and return its tone for investors
 (max 28 words) on what is driving it. Tone is "Positive", "Negative" or "Mixed"; use "Mixed" when the
 headlines conflict or are thin. Do not mention sectors with no headlines.
 
-{blocks}
+{_blocks}
 
 Return JSON exactly like: {{"sectors": {{"<sector name>": {{"tone": "Positive", "read": "..."}}}}}}"""
     out = _generate(prompt, temperature=0.2)
@@ -220,7 +239,7 @@ Return JSON exactly like: {{"sectors": {{"<sector name>": {{"tone": "Positive", 
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False, max_entries=20)
-def portfolio_review(facts: str, day: str) -> dict:
+def portfolio_review(day: str, key: str, _facts: str) -> dict:
     """A short review of a personal portfolio, written only from its computed numbers."""
     prompt = f"""{STYLE}
 
@@ -228,7 +247,7 @@ Review this stock portfolio for its owner, the way a portfolio manager would sum
 report. Today is {day}. Use only the numbers below.
 
 PORTFOLIO DATA (computed by the app):
-{facts}
+{_facts}
 
 Return JSON exactly like:
 {{

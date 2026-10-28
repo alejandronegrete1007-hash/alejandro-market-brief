@@ -94,7 +94,7 @@ def render():
     blocks = "\n\n".join(f"## {name}\n" + "\n".join(f"- {n['title']}" for n in tagged[name][:12])
                          for name, _, _ in SECTORS if tagged[name])
     try:
-        reads = ai.sector_reads(blocks, ai.stamp_6h(dt.datetime.now(src.MX))) if blocks else {}
+        reads = ai.sector_reads(ai.stamp_6h(dt.datetime.now(src.MX)), blocks) if blocks else {}
     except Exception:
         reads = {}
     T.section("By sector", "click a sector to filter the headlines · AI read of its headlines")

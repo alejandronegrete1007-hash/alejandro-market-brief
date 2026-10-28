@@ -368,7 +368,8 @@ def _positions():
     if st.button("Write the review", type="primary", key="pf_review_btn") or st.session_state.get(key):
         try:
             with st.spinner("Reviewing the portfolio..."):
-                review = ai.portfolio_review(_facts(lots, nav, twr, spy_ret, risk, weights), day)
+                pkey = ai.digest(*(f"{p['sym']}|{p['shares']}|{p['date']}" for p in pos))
+                review = ai.portfolio_review(day, pkey, _facts(lots, nav, twr, spy_ret, risk, weights))
             st.session_state[key] = True
         except Exception as e:
             st.info(f"The written review isn't available right now ({e}).")

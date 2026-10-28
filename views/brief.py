@@ -295,39 +295,22 @@ def _brief(quotes, eww, btc, t10, bx, fix):
             T.show('<div class="amb-note" style="margin:-4px 0 6px">Top headlines while the brief is written '
                    '(10–30 seconds the first time every 6 hours)…</div>')
             T.show(T.news_list(us_news[:4] + mx_news[:4], 8))
+        b, note = None, ""
         try:
             with st.spinner("Writing today's brief..."):
-                b = ai.daily_brief(_snapshot(quotes, eww, btc, t10, bx, fix),
-                                   tuple(_fmt_headline(h) for h in pool), ai.stamp_6h(dt.datetime.now(src.MX)))
-            waiting.empty()
-            T.show(f'<div class="amb-lead"><span>›</span> {T.esc(b.get("headline", ""))}</div>'
-                   f'<div class="amb-grid g2 stack">'
-                   f'<div class="amb-take"><div class="h">{T.chip("US", "US")} Wall Street</div><p>{T.esc(b.get("us", ""))}</p></div>'
-                   f'<div class="amb-take"><div class="h">{T.chip("MX", "MX")} México</div><p>{T.esc(b.get("mexico", ""))}</p></div>'
-                   f'</div>')
-            known = src.known_tickers()
-            cards = []
-            for i, s in enumerate(b.get("stories", []), start=1):
-                srcs = "".join(
-                    f'<a class="amb-src" href="{T.esc(pool[j]["url"])}" target="_blank" rel="noopener">'
-                    f'{T.esc(pool[j]["source"])}{(" · " + pool[j]["time"].strftime("%b %d %H:%M")) if pool[j].get("time") else ""} ↗</a>'
-                    for j in s["sources"][:4])
-                mk = s.get("market") if s.get("market") in ("US", "MX", "GLOBAL") else "GLOBAL"
-                cards.append(
-                    f'<div class="amb-story"><div class="top">{T.chip(mk, mk)}<span class="rank">{i:02d}</span></div>'
-                    f'<h3>{T.esc(s["title"])}</h3>'
-                    f'<div class="row"><b>What happened</b>{T.esc(s.get("what", ""))}</div>'
-                    f'<div class="row"><b>Why it matters</b>{T.esc(s.get("why", ""))}</div>'
-                    f'{_impact_html(s, known)}'
-                    f'<div class="row"><b>Watch next</b>{T.esc(s.get("watch", ""))}</div>'
-                    f'<div class="amb-srcs">{srcs}</div></div>')
-            st.write("")
-            click(T.grid(cards, "g3 stack"), "stories")
-            T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>Written by Gemini only from the headlines and numbers '
-                   'on this page; every story links to its articles. ▲ ▼ ◆ show the likely first reaction for each ticker '
-                   '(up, down, mixed), not a forecast. Click a ticker to analyze it.</div>')
+                b = ai.daily_brief(ai.stamp_6h(dt.datetime.now(src.MX)), _snapshot(quotes, eww, btc, t10, bx, fix),
+                                   tuple(_fmt_headline(h) for h in pool),
+                                   tuple((h["url"], h["source"], h.get("time")) for h in pool))
         except Exception as e:
-            st.info(f"The AI brief isn't available right now ({e}). The latest headlines are below.")
+            b = ai.LAST.get("brief")
+            note = (f"This brief was written earlier ({b.get('stamp', '')[:10]}); a new one isn't available right now ({e})."
+                    if b else "")
+            if not b:
+                waiting.empty()
+                st.info(f"The AI brief isn't available right now ({e}). The latest headlines are below.")
+        if b:
+            waiting.empty()
+            _render_brief(b, pool, note)
 
     with st.expander("All headlines", expanded=False):
         t1, t2 = st.tabs(["Wall Street", "México"])
@@ -338,3 +321,35 @@ def _brief(quotes, eww, btc, t10, bx, fix):
         failed = us_failed + mx_failed
         if failed:
             T.show(f'<div class="amb-note">Feeds that didn\'t answer this time: {T.esc(", ".join(failed))}</div>')
+
+
+def _render_brief(b: dict, pool: list[dict], note: str = ""):
+    refs = b.get("refs") or [(h["url"], h["source"], h.get("time")) for h in pool]
+    if note:
+        T.show(f'<div class="amb-note" style="margin:-4px 0 8px">{T.esc(note)}</div>')
+    T.show(f'<div class="amb-lead"><span>›</span> {T.esc(b.get("headline", ""))}</div>'
+           f'<div class="amb-grid g2 stack">'
+           f'<div class="amb-take"><div class="h">{T.chip("US", "US")} Wall Street</div><p>{T.esc(b.get("us", ""))}</p></div>'
+           f'<div class="amb-take"><div class="h">{T.chip("MX", "MX")} México</div><p>{T.esc(b.get("mexico", ""))}</p></div>'
+           f'</div>')
+    known = src.known_tickers()
+    cards = []
+    for i, s in enumerate(b.get("stories", []), start=1):
+        srcs = "".join(
+            f'<a class="amb-src" href="{T.esc(refs[j][0])}" target="_blank" rel="noopener">'
+            f'{T.esc(refs[j][1])}{(" · " + refs[j][2].strftime("%b %d %H:%M")) if refs[j][2] else ""} ↗</a>'
+            for j in s["sources"][:4] if j < len(refs))
+        mk = s.get("market") if s.get("market") in ("US", "MX", "GLOBAL") else "GLOBAL"
+        cards.append(
+            f'<div class="amb-story"><div class="top">{T.chip(mk, mk)}<span class="rank">{i:02d}</span></div>'
+            f'<h3>{T.esc(s["title"])}</h3>'
+            f'<div class="row"><b>What happened</b>{T.esc(s.get("what", ""))}</div>'
+            f'<div class="row"><b>Why it matters</b>{T.esc(s.get("why", ""))}</div>'
+            f'{_impact_html(s, known)}'
+            f'<div class="row"><b>Watch next</b>{T.esc(s.get("watch", ""))}</div>'
+            f'<div class="amb-srcs">{srcs}</div></div>')
+    st.write("")
+    click(T.grid(cards, "g3 stack"), "stories")
+    T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>Written by Gemini only from the headlines and numbers '
+           'on this page; every story links to its articles. ▲ ▼ ◆ show the likely first reaction for each ticker '
+           '(up, down, mixed), not a forecast. Click a ticker to analyze it.</div>')
