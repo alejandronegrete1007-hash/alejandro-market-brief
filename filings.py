@@ -27,7 +27,7 @@ TAGS = {
     "lt_investments": ["MarketableSecuritiesNoncurrent", "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"],
     "debt_total": ["LongTermDebt"],
     "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
-    "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
+    "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent", "DebtCurrent"],
     "short_borrowings": ["ShortTermBorrowings", "CommercialPaper"],
     "ebit": ["OperatingIncomeLoss"],
     "da": ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
@@ -52,7 +52,8 @@ BALANCE = {
     "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "receivables": ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"],
     "inventory": ["InventoryNet"],
-    "payables": ["AccountsPayableCurrent", "AccountsPayableTradeCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"],
+    # Broadest operating payables first: accrued liabilities are part of operating working capital too.
+    "payables": ["AccountsPayableCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent", "AccountsPayableTradeCurrent"],
     "cash": ["CashAndCashEquivalentsAtCarryingValue",
              "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "st_investments": ["MarketableSecuritiesCurrent", "ShortTermInvestments",
@@ -60,7 +61,7 @@ BALANCE = {
     "lt_investments": ["MarketableSecuritiesNoncurrent", "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"],
     "debt_total": ["LongTermDebt"],
     "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
-    "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
+    "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent", "DebtCurrent"],
     "short_borrowings": ["ShortTermBorrowings", "CommercialPaper"],
 }
 
