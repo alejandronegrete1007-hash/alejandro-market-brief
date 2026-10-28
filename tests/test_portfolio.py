@@ -88,3 +88,15 @@ def test_time_weighted_return_ignores_new_money():
     assert twr.iloc[1] == pytest.approx(0.10)
     assert twr.iloc[2] == pytest.approx(0.10)
     assert twr.iloc[3] == pytest.approx(1.10 * (1 + 11 / 610) - 1)
+
+
+def test_two_stocks_draw_the_full_curve():
+    r = _returns(n=2)
+    cov, _ = P.ledoit_wolf_cc(r)
+    mu = P.capm_returns({"S0": 0.8, "S1": 1.4}, rf=0.045, erp=0.05)
+    cap = P.effective_cap(0.35, 2)
+    assert cap == 1.0  # a 35% cap would force 50/50
+    fr = P.frontier(mu, cov * P.PERIODS, 0.045, cap)
+    assert fr["ret"].min() == pytest.approx(mu.min(), abs=1e-6)   # 100% in the low-beta stock
+    assert fr["ret"].max() == pytest.approx(mu.max(), abs=1e-6)   # 100% in the high-beta stock
+    assert fr["efficient"].any() and (fr["vol"].max() > fr["vol"].min())

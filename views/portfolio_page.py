@@ -480,6 +480,11 @@ def _lab():
     mu = pd.Series({s_: V.capm(rf, b_, erp) for s_, b_ in betas.items()})  # same CAPM as the DCF (beta held to 0.5-2.5)
     cov, delta = P.ledoit_wolf_cc(wk[have])
     cov = cov * P.PERIODS
+    cap_used = P.effective_cap(cap, len(have))
+    if cap_used > cap + 1e-9:
+        st.caption(f"With {len(have)} stocks a {cap:.0%} cap would leave almost no choice, so up to {cap_used:.0%} per stock is "
+                   f"allowed here. Add stocks to use a tighter cap.")
+    cap = cap_used
     w_sh = P.optimize(mu, cov, rf, cap, "sharpe")
     w_mv = P.optimize(mu, cov, rf, cap, "minvar")
     w_eq = np.full(len(have), 1 / len(have))
@@ -493,7 +498,18 @@ def _lab():
             d_me = P.describe((vals / vals.sum()).to_numpy(), mu, cov, rf)
 
     fig = go.Figure()
-    fig.add_scatter(x=fr["vol"] * 100, y=fr["ret"] * 100, mode="lines", name="Efficient frontier",
+    if len(have) == 2:  # the classic two-asset curve: every mix from 100% of one to 100% of the other
+        ws = np.linspace(0, 1, 41)
+        mix = [((w * mu.iloc[0] + (1 - w) * mu.iloc[1]) * 100,
+                np.sqrt(max(w * w * cov[0, 0] + (1 - w) ** 2 * cov[1, 1] + 2 * w * (1 - w) * cov[0, 1], 0)) * 100) for w in ws]
+        fig.add_scatter(x=[v for _, v in mix], y=[r for r, _ in mix], mode="lines", name="All mixes of the two",
+                        line=dict(color=T.C["muted"], width=1.2, dash="dot"),
+                        hovertemplate="risk %{x:.1f}%, return %{y:.1f}%<extra></extra>")
+    eff, low = fr[fr["efficient"]], fr[~fr["efficient"]]
+    if len(low) > 1:
+        fig.add_scatter(x=low["vol"] * 100, y=low["ret"] * 100, mode="lines", name="Inefficient branch",
+                        line=dict(color=T.C["acc"], width=1.2, dash="dot"), hoverinfo="skip")
+    fig.add_scatter(x=eff["vol"] * 100, y=eff["ret"] * 100, mode="lines", name="Efficient frontier",
                     line=dict(color=T.C["acc"], width=2.4))
     vols = np.sqrt(np.diag(cov))
     fig.add_scatter(x=vols * 100, y=mu.values * 100, mode="markers+text", name="Single stocks", text=have,

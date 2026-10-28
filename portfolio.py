@@ -116,25 +116,39 @@ def _solve(m, cov, rf, cap, goal, target, w0) -> np.ndarray:
     return w / w.sum()
 
 
-def frontier(mu: pd.Series, cov: np.ndarray, rf: float, cap: float = 0.35, points: int = 25) -> pd.DataFrame:
-    """Efficient frontier from the minimum-variance portfolio to the highest reachable return."""
-    m = mu.to_numpy()
-    w_min = optimize(mu, cov, rf, cap, "minvar")
-    lo = float(w_min @ m)
-    # highest return with the cap: fill the best assets up to the cap
-    order = np.argsort(-m)
-    w_hi, left = np.zeros(len(m)), 1.0
+def effective_cap(cap: float, n: int) -> float:
+    """A per-stock cap that still leaves room to choose. With few stocks a tight cap pins the weights
+    (two stocks capped at 35% each can only be 50/50, so the frontier collapses to one point), so the cap
+    is never below 2/n: 100% with two stocks, 67% with three, 40% with five."""
+    return float(min(1.0, max(cap, 2.0 / n)))
+
+
+def _extreme(m: np.ndarray, cap: float, best: bool) -> float:
+    """Highest (or lowest) expected return reachable: fill the best (or worst) stocks up to the cap."""
+    order = np.argsort(-m if best else m)
+    w, left = np.zeros(len(m)), 1.0
     for i in order:
         take = min(max(cap, 1 / len(m)), left)
-        w_hi[i], left = take, left - take
+        w[i], left = take, left - take
         if left <= 1e-12:
             break
-    hi = float(w_hi @ m)
+    return float(w @ m)
+
+
+def frontier(mu: pd.Series, cov: np.ndarray, rf: float, cap: float = 0.35, points: int = 25) -> pd.DataFrame:
+    """The minimum-variance frontier, from the lowest to the highest reachable return. Rows above the
+    minimum-variance portfolio are the efficient frontier ('efficient' = True); the rest is the
+    inefficient lower branch (same risk, less return)."""
+    m = mu.to_numpy()
+    w_min = optimize(mu, cov, rf, cap, "minvar")
+    mid = float(w_min @ m)
+    lo, hi = _extreme(m, cap, best=False), _extreme(m, cap, best=True)
+    targets = sorted(set(np.r_[np.linspace(lo, mid, max(points // 2, 2)), np.linspace(mid, hi, points)].round(12)))
     rows = []
-    for tr in np.linspace(lo, hi, points):
-        w = optimize(mu, cov, rf, cap, "target", tr) if tr > lo + 1e-9 else w_min
+    for tr in targets:
+        w = w_min if abs(tr - mid) < 1e-9 else optimize(mu, cov, rf, cap, "target", tr)
         r, v = _stats(w, m, cov)
-        rows.append({"ret": r, "vol": v})
+        rows.append({"ret": r, "vol": v, "efficient": tr >= mid - 1e-9})
     return pd.DataFrame(rows)
 
 
