@@ -68,7 +68,7 @@ def render():
     T.show(f"""
     <div class="amb-hero" style="margin-top:6px">
       <div style="display:flex;gap:14px;align-items:center;min-width:0">{T.logo(prof['logo'], sym, 52)}
-        <div style="min-width:0"><div class="amb-eyebrow">{T.esc(prof['industry'] or kind)} · {kind}</div>
+        <div style="min-width:0"><div class="amb-eyebrow">{(T.esc(prof['industry']) + ' · ') if prof['industry'] else ''}{kind}</div>
         <h1 style="font-size:clamp(1.6rem,3.4vw,2.5rem)">{T.esc(name_of(sym))} <span style="color:var(--muted);font-weight:500">{T.esc(sym)}</span></h1>
         <div class="sub">{T.chip(market, market)}<span>{T.status(q['time'], is_open)}</span>
         <span>{('Next earnings ' + er['date'] + (' · ' + er['when'] if er['when'] else '')) if er else 'No earnings date announced'}</span></div></div>
@@ -386,7 +386,7 @@ def _valuation_tab(sym, q, m, rf, rf_label, close, market, ctx):
                 return ""
             al = min(abs(x / price - 1) / 0.5, 1) * 0.45 + 0.08
             return f"background-color: rgba({'43,214,123' if x >= price else '255,92,108'},{al:.2f}); color: #ECEFF4"
-        st.dataframe(tbl.style.format("${:,.0f}").map(shade), use_container_width=True)
+        st.dataframe(tbl.style.format("${:,.0f}").map(shade), width="stretch")
         T.show(f'<div class="amb-note">Green above today\'s price ({T.money(price)}), red below.</div>')
 
     _history_chart(f)

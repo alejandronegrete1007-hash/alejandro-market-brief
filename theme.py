@@ -487,4 +487,4 @@ def plot(fig: go.Figure, height: int = 340, title: str | None = None):
     if title:
         fig.update_layout(title=dict(text=title, font=dict(family="Space Grotesk, Inter, Arial, sans-serif", size=14, color=C["text"]), x=0.01))
     fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})

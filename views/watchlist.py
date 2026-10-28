@@ -65,7 +65,7 @@ def render():
             for r in res[:6]:
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(f"**{r['symbol']}** · {r['name']}")
-                c2.button("Add", key=f"add_{r['symbol']}", on_click=_add_cb, args=(r["symbol"],), use_container_width=True)
+                c2.button("Add", key=f"add_{r['symbol']}", on_click=_add_cb, args=(r["symbol"],), width="stretch")
     with b:
         if mine:
             st.pills("Tap to remove", mine, selection_mode="single", key="wl_remove", on_change=_remove_cb)
