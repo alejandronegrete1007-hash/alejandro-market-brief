@@ -297,6 +297,49 @@ def search(query: str) -> list[dict]:
     return out[:8]
 
 
+_SUFFIX = re.compile(r"[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|sa|s\.a\.|n\.v\.|nv|ag|se|lp|llc|holdings?|group)\.?$", re.I)
+_SMALL = {"of", "and", "the", "de", "del", "y", "&"}
+
+
+def _pretty(name: str) -> str:
+    """'MICRON TECHNOLOGY INC' -> 'Micron Technology'."""
+    n = re.sub(r"\s*/[A-Z]{2,3}/?\s*$", "", name.strip())
+    for _ in range(2):
+        n = _SUFFIX.sub("", n).strip(" ,.&")
+    words = []
+    for i, w in enumerate(n.split()):
+        lw = w.lower()
+        if i and lw in _SMALL:
+            words.append(lw)
+        elif (not w.isalpha() and len(w) <= 5) or (len(w) <= 3 and w.isupper() and lw not in ("new", "one", "air", "oil")):
+            words.append(w)  # AT&T, IBM, AMD
+        else:
+            words.append(w[:1].upper() + w[1:].lower())
+    return " ".join(words) or name
+
+
+@st.cache_data(ttl=7 * 86400, show_spinner=False)
+def search_index() -> str:
+    """Every SEC-registered ticker (US stocks and ADRs), common ETFs, the Mexican ADRs and the foreign
+    names traded over the counter, as 'TICKER|Name' lines for the header search box (searched in the browser)."""
+    rows: dict[str, str] = {}
+    for sym, (name, _) in __import__("mexico").UNIVERSE.items():
+        rows[sym] = name
+    for sym, name in ETFS.items():
+        rows.setdefault(sym, f"{name} ETF")
+    for key, (sym, label) in FOREIGN_US_TICKERS.items():
+        rows.setdefault(sym, label)
+    try:
+        d = get_json("https://www.sec.gov/files/company_tickers.json", headers=_sec_headers())
+        for v in d.values():
+            sym = str(v.get("ticker", "")).upper()
+            if US_TICKER.match(sym):
+                rows.setdefault(sym, _pretty(str(v.get("title", sym))))
+    except Exception:
+        pass
+    return "\n".join(f"{k}|{v.replace('|', ' ')}" for k, v in rows.items())
+
+
 @st.cache_data(ttl=43200, show_spinner=False)
 def next_earnings(symbol: str) -> dict | None:
     today = dt.date.today()
@@ -505,6 +548,18 @@ US_FEEDS = {
     "WSJ Markets": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
     "Federal Reserve": "https://www.federalreserve.gov/feeds/press_all.xml",
 }
+# Sector feeds, used by the News page only (the daily brief keeps the general feeds above).
+SECTOR_FEEDS = {
+    "CNBC Technology": "https://www.cnbc.com/id/19854910/device/rss/rss.html",
+    "CNBC Finance": "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "CNBC Health Care": "https://www.cnbc.com/id/10000108/device/rss/rss.html",
+    "CNBC Energy": "https://www.cnbc.com/id/19836768/device/rss/rss.html",
+    "CNBC Real Estate": "https://www.cnbc.com/id/10000115/device/rss/rss.html",
+    "CNBC Retail": "https://www.cnbc.com/id/10000116/device/rss/rss.html",
+    "CNBC Autos": "https://www.cnbc.com/id/10000101/device/rss/rss.html",
+    "CNBC Media": "https://www.cnbc.com/id/10000110/device/rss/rss.html",
+    "CNBC World": "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+}
 MX_FEEDS = {
     "El Financiero": "https://www.elfinanciero.com.mx/arc/outboundfeeds/rss/category/mercados/?outputType=xml",
     "El Financiero Economía": "https://www.elfinanciero.com.mx/arc/outboundfeeds/rss/category/economia/?outputType=xml",
@@ -551,6 +606,19 @@ def feeds(market: str) -> tuple[list[dict], list[str]]:
         except Exception:
             failed.append("Finnhub")
     return items, failed
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def sector_headlines() -> tuple[list[dict], list[str]]:
+    """Headlines from the sector feeds, last 36 hours."""
+    items, failed = [], []
+    for source, url in SECTOR_FEEDS.items():
+        try:
+            items += _parse_feed(source.replace("CNBC ", "CNBC · "), url, "US")
+        except Exception:
+            failed.append(source)
+    cutoff = dt.datetime.now(ET) - dt.timedelta(hours=36)
+    return dedupe([i for i in items if i["time"] and i["time"] >= cutoff]), failed
 
 
 def _norm(t: str) -> str:

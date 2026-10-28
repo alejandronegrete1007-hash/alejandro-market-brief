@@ -10,10 +10,15 @@ Every morning it answers three questions in about five minutes: what moved, why,
 | Page | What you get |
 |---|---|
 | **Today** | Clickable cards for US indices (via ETFs), gold, oil, Bitcoin, the 10Y yield, the **Treasury yield curve** (with 10Y−2Y and 10Y−3M spreads), **sector performance**, the peso (Banxico FIX), Banxico's rate, inflation, CETES, TIIE and the real policy rate. An AI brief where every story lists **the markets and tickers it moves** (▲ ▼ ◆), each ticker one click from its analysis, and links to its sources |
+| **News** | Headlines by market and by **sector** (keyword-tagged, with an AI tone and one-line read per sector and the sector ETF's move), plus company news for the stocks you hold and follow |
 | **México** | Banxico charts (USD/MXN, Banxico vs Fed, inflation vs the 3% ± 1 target) and a live **YTD ranking of Mexican companies listed in New York** |
-| **Watchlist** | S&P 500 leaders of 2026 and the live Mexico top 5 (both fixed), **My stocks** saved in the browser, the **track record of my research calls** vs the S&P 500, and a **portfolio lab** (Markowitz efficient frontier, CAPM expected returns, Ledoit-Wolf covariance) |
+| **Watchlist** | S&P 500 leaders of 2026 and the live Mexico top 5 (both fixed), plus **My stocks** saved in the browser |
+| **Portfolio** | A broker-style **P&L** of your positions (market value, daily and unrealized P&L, % of NAV, time-weighted return vs the S&P 500, VaR and beta of the holdings), the **track record of your research calls** (call alpha vs the S&P 500, hit rate) and a **portfolio lab**: Markowitz efficient frontier with CAPM expected returns, Ledoit-Wolf constant-correlation covariance, tangency and minimum-variance portfolios, your own portfolio and the correlation matrix |
 | **Analysis** | Seven tabs for any US-listed stock: **Chart & risk** (moving averages, drawdown, historical VaR / expected shortfall vs a normal model, skew and kurtosis) · **Valuation** (cost of capital built step by step, a DCF valued four ways, bear/base/bull scenarios with probabilities, peers' multiples, football field, sensitivity) · **Financials** (horizontal and vertical analysis, liquidity, leverage, activity and profitability ratios, DuPont, earnings-quality checks, **EVA** and ROIC vs WACC) · **Outlook** (4,000 bootstrap-simulated paths) · **Compare** (vs market, sector and competitors) · **Research note** (Wall Street consensus plus a one-page note: thesis, valuation, quality, scenarios, catalysts, risks; save your Buy / Hold / Sell call or download the note) · **News** |
 | **Methodology** | Every formula and source, plus a live data-health check |
+
+A search box in the header finds any US-listed company or ADR by name or ticker (press `/`), and every card, ticker-tape
+item and table row opens its analysis.
 
 ## Valuation approach
 
@@ -52,7 +57,7 @@ Hosting and every data source run on free tiers. A GitHub Actions job visits eve
 pip install -r requirements.txt
 AMB_DEMO=1 streamlit run app.py   # synthetic data, no keys needed
 streamlit run app.py              # real data: put your keys in .streamlit/secrets.toml (see secrets.example.toml)
-pytest -q                         # DCF, EVA (incl. the seminar's EVA problem), ratios, VaR, Markowitz, Ledoit-Wolf
+pytest -q                         # DCF, EVA (incl. the seminar's EVA problem), ratios, VaR, P&L and TWR, Markowitz, Ledoit-Wolf
 ```
 
 *Personal project. Not investment advice.*

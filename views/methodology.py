@@ -95,10 +95,23 @@ Positive EVA means the return on capital beats its cost.
 average loss beyond it) from two years of real daily returns, compared with what a normal distribution would say, plus
 skewness and excess kurtosis. Real returns have fatter tails than the bell curve.
 
+**Portfolio and P&L.** Positions (ticker, shares, average cost, date) are marked to market with live quotes: market value,
+daily P&L (shares × today's change), unrealized P&L (market value − cost basis) and weight in net liquidation value
+(positions + cash). Performance is the time-weighted return: each purchase is new money on its date, so
+r_t = (V_t − F_t) / V_(t−1) − 1, compared with SPY over the same days. Risk applies today's weights to two years of daily
+returns (historical simulation): beta, annualized volatility, 1-day VaR and expected shortfall in dollars, and the effective
+number of positions (1 / Σw²).
+
 **Portfolio lab.** Markowitz mean-variance optimization, long-only and fully invested, with a cap per stock. Expected
-returns from CAPM; risk from the covariance of two years of weekly returns, shrunk with Ledoit-Wolf (2004) toward a
-constant-variance target. Shows the efficient frontier, the minimum-variance and maximum-Sharpe portfolios and the
-capital market line.
+returns from CAPM (the same cost of equity as the DCF); risk from the covariance of two years of weekly returns, annualized
+and shrunk with Ledoit-Wolf (2004) toward a constant-correlation matrix, which keeps each stock's variance and pulls noisy
+correlations toward their average (checked against PyPortfolioOpt in the tests). Shows the efficient frontier, the
+minimum-variance and maximum-Sharpe (tangency) portfolios, your own portfolio, the capital market line and the
+correlation matrix. The tangency search starts from several points because the Sharpe ratio is not convex.
+
+**News.** Headlines from the general and sector RSS feeds and Finnhub, last 36 hours, near-duplicates removed, assigned to
+sectors by keywords in English and Spanish. Gemini writes one line and a tone per sector only from that sector's headlines.
+"My stocks" pulls Finnhub company news for your positions, My stocks and the 2026 leaders.
 
 **Outlook (price simulation).** 4,000 six-month paths. Each simulated day replays a randomly chosen real daily move
 from the last two years (a bootstrap), re-centred to the drift you pick: neutral (0%), market average (+8% a year) or the
@@ -117,7 +130,7 @@ trends). Score: strong buy = 5 … strong sell = 1.
 
 **Research note.** Gemini writes the thesis, scenarios, risks, catalysts and a Buy / Hold / Sell lean only from the
 numbers of every tab (valuation with your assumptions, financial analysis, EVA, risk, comparison and consensus), and must
-say what would change its mind. The call is yours: you can save it, and the Watchlist tracks its return against the S&P 500
+say what would change its mind. The call is yours: you can save it, and the Portfolio page tracks its return against the S&P 500
 from that day (price and S&P 500 level are recorded when you save). The note downloads as a printable page.
 
 **DCF for Mexican ADRs.** Not automatic: they file a 20-F in IFRS and pesos, and one ADR equals several local shares.

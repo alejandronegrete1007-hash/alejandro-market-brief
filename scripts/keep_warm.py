@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("APP_URL", "https://alejandro-market-brief.streamlit.app").rstrip("/")
 TICKERS = os.environ.get("WARM_TICKERS", "MU,SNDK,DELL,MRNA,MPC").split(",")
-PAGES = ["/", "/mexico", "/watchlist"] + [f"/analysis?t={t.strip()}" for t in TICKERS if t.strip()]
+PAGES = ["/", "/news", "/mexico", "/watchlist", "/portfolio"] + [f"/analysis?t={t.strip()}" for t in TICKERS if t.strip()]
 PAGE_BUDGET = int(os.environ.get("PAGE_BUDGET", "150"))  # seconds per page
 
 

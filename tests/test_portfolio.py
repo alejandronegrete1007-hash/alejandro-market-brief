@@ -47,3 +47,44 @@ def test_frontier_is_increasing_in_risk():
     fr = P.frontier(mu, cov * P.PERIODS, 0.045, cap=0.5, points=8)
     assert fr["ret"].is_monotonic_increasing
     assert fr["vol"].iloc[-1] >= fr["vol"].iloc[0]
+
+
+def test_constant_correlation_shrinkage():
+    r = _returns(n=5)
+    cov, delta = P.ledoit_wolf_cc(r)
+    s = np.cov(r.to_numpy(), rowvar=False, ddof=0)
+    assert 0 <= delta <= 1
+    assert np.allclose(np.diag(cov), np.diag(s))  # each stock keeps its own variance
+    assert np.allclose(cov, cov.T)
+    assert np.all(np.linalg.eigvalsh(cov) > 0)
+
+
+def test_constant_correlation_matches_pyportfolioopt():
+    rm = pytest.importorskip("pypfopt.risk_models")
+    r = _returns(n=5)
+    _, delta = P.ledoit_wolf_cc(r)
+    ref = rm.CovarianceShrinkage(r, returns_data=True, frequency=1)
+    ref.ledoit_wolf(shrinkage_target="constant_correlation")
+    # PyPortfolioOpt uses the n-1 sample covariance; the paper (and this app) use 1/T, so allow a small gap.
+    assert delta == pytest.approx(ref.delta, abs=0.02)
+
+
+def test_pnl_rows_by_hand():
+    rows = P.pnl_rows([{"sym": "AAA", "shares": 10, "cost": 50.0, "date": "2026-01-02"}],
+                      {"AAA": {"price": 60.0, "change": 2.0, "pct": 3.4483}})
+    r = rows.iloc[0]
+    assert r["value"] == 600 and r["basis"] == 500 and r["unrl"] == 100
+    assert r["daily"] == pytest.approx(20)
+    assert r["unrl_pct"] == pytest.approx(0.2)
+
+
+def test_time_weighted_return_ignores_new_money():
+    idx = pd.bdate_range("2026-01-01", periods=4)
+    closes = pd.DataFrame({"A": [100, 110, 110, 121], "B": [50, 50, 50, 50]}, index=idx)
+    # buy A on day 1; buy B on day 3 (a deposit that must not count as return)
+    twr = P.time_weighted([{"sym": "A", "shares": 1, "date": str(idx[0].date())},
+                           {"sym": "B", "shares": 10, "date": str(idx[2].date())}], closes)
+    # day 2: +10%; day 3: flat; day 4: A +10% on a portfolio of 110 + 500 -> +11/610
+    assert twr.iloc[1] == pytest.approx(0.10)
+    assert twr.iloc[2] == pytest.approx(0.10)
+    assert twr.iloc[3] == pytest.approx(1.10 * (1 + 11 / 610) - 1)

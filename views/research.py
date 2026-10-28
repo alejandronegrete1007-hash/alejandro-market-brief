@@ -220,7 +220,7 @@ def render(sym: str, ctx: dict):
     T.show(f'<div class="amb-lead" style="margin-top:20px">{T.esc(t.get("bottom_line", ""))}</div>')
 
     # ---- your call
-    T.section("Your call", "save it and the Watchlist tracks it against the S&P 500", "Track record")
+    T.section("Your call", "save it and the Portfolio page tracks it against the S&P 500", "Track record")
     c1, c2, c3 = st.columns([1.2, 1, 1], gap="medium")
     with c1:
         call = st.segmented_control("Call", ["Buy", "Hold", "Sell"], default=lean, key=f"call_{sym}")

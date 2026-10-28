@@ -63,15 +63,19 @@ def render():
     fix = _safe(mexico.fix_history, 400)
     S = mexico.SERIES
 
-    items = [(lbl, T.money(q["price"]), q["pct"]) for (lbl, s), q in ((x, quotes[x[1]]) for x in US_SET) if q]
+    items = [(lbl, T.money(q["price"]), q["pct"], f"t:{s}") for (lbl, s), q in ((x, quotes[x[1]]) for x in US_SET) if q]
     if btc:
         items.append(("Bitcoin", T.money(btc["price"], 0), btc["pct"]))
     if fix is not None and len(fix) > 1:
-        items.append(("USD/MXN", f"{fix.iloc[-1]:.4f}", (fix.iloc[-1] / fix.iloc[-2] - 1) * 100))
+        items.append(("USD/MXN", f"{fix.iloc[-1]:.4f}", (fix.iloc[-1] / fix.iloc[-2] - 1) * 100, "p:mexico"))
     if eww:
-        items.append(("México · EWW", T.money(eww["price"]), eww["pct"]))
+        items.append(("México · EWW", T.money(eww["price"]), eww["pct"], "t:EWW"))
+    for sym in state.US_LEADERS + state.mx_leaders()[0]:
+        q = src.try_quote(sym)
+        if q:
+            items.append((sym, T.money(q["price"]), q["pct"], f"t:{sym}"))
     if items:
-        T.show(T.tape(items))
+        click(T.tape(items), "tape")
 
     main, rail = st.columns([2.9, 1], gap="large")
     with main:

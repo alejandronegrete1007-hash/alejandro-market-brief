@@ -262,6 +262,11 @@ def fake_ai(prompt: str) -> dict:
                 {"market": "MX", "title": "BMV edges up", "what": "The IPC rose 0.3%.", "why": "Shows local stocks holding up.",
                  "watch": "Q3 reports from large issuers.", "sources": [7, 99]},
             ]}
+    if "For each sector below" in prompt:
+        names = re.findall(r"^## (.+)$", prompt, flags=re.M)
+        tones = ["Positive", "Mixed", "Negative"]
+        return {"sectors": {n: {"tone": tones[i % 3], "read": f"Demo: {n.lower()} headlines are driven by earnings and rates."}
+                            for i, n in enumerate(names)}}
     if "research note" in prompt:
         return {"one_liner": "Demo: a cyclical winner priced for the peak; quality is high but the market already pays for it.",
                 "thesis": ["Revenue has compounded quickly and margins sit well above the company's own five-year average.",

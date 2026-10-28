@@ -23,19 +23,21 @@ MY_MAX = 25
 TICKER = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
 
 _STORE_JS = """
-let lastSent;
 export default function(component) {
   const { data, setStateValue } = component;
-  const KEYS = {my: 'amb_my_stocks_v1', calls: 'amb_calls_v1'};
+  const KEYS = {my: 'amb_my_stocks_v1', calls: 'amb_calls_v1', pf: 'amb_portfolio_v1'};
   const out = {};
   for (const [name, key] of Object.entries(KEYS)) {
     try {
       if (data && typeof data[name] === 'string') localStorage.setItem(key, data[name]);
-      out[name] = localStorage.getItem(key) || '[]';
-    } catch (e) { out[name] = '[]'; }
+      out[name] = localStorage.getItem(key) || (name === 'pf' ? '{}' : '[]');
+    } catch (e) { out[name] = name === 'pf' ? '{}' : '[]'; }
   }
+  // Send only what Python hasn't seen. Kept on window (not in the module) because the component is
+  // mounted again when the page changes, and a needless rerun then would undo the page switch.
   const msg = JSON.stringify(out);
-  if (msg !== lastSent) { lastSent = msg; setStateValue('saved', msg); }
+  if (data && data.loaded) { window.__ambStoreSent = msg; return; }
+  if (msg !== window.__ambStoreSent) { window.__ambStoreSent = msg; setStateValue('saved', msg); }
 }
 """
 _store = st.components.v2.component("amb_store", js=_STORE_JS)
@@ -69,15 +71,44 @@ def _clean_calls(raw) -> list[dict]:
     return out[-50:]
 
 
+def _clean_pf(raw) -> dict:
+    """Positions: ticker, shares, average cost, date bought; plus cash."""
+    try:
+        d = json.loads(raw) if isinstance(raw, str) else dict(raw or {})
+    except Exception:
+        d = {}
+    out = []
+    for p in d.get("positions") or []:
+        try:
+            sym = str(p.get("sym", "")).upper().strip()
+            sh, cost = float(p.get("shares")), float(p.get("cost"))
+        except Exception:
+            continue
+        if TICKER.match(sym) and sh > 0 and cost > 0:
+            out.append({"sym": sym, "shares": sh, "cost": cost, "date": str(p.get("date") or "")[:10]})
+    try:
+        cash = float(d.get("cash") or 0)
+    except Exception:
+        cash = 0.0
+    return {"cash": cash, "positions": out[:40]}
+
+
+def set_portfolio(pf: dict):
+    st.session_state.pf = _clean_pf(pf)
+    st.session_state.my_loaded = True
+
+
 def init():
     """Run once per page load, before any page renders."""
     ss = st.session_state
     ss.setdefault("my", [])
     ss.setdefault("calls", [])
+    ss.setdefault("pf", {"cash": 0.0, "positions": []})
     ss.setdefault("my_loaded", False)
     if "focus" not in ss:
         ss.focus = (st.query_params.get("t") or "").upper() or None
-    data = {"my": json.dumps(ss.my), "calls": json.dumps(ss.calls)} if ss.my_loaded else {}
+    data = ({"my": json.dumps(ss.my), "calls": json.dumps(ss.calls), "pf": json.dumps(ss.pf), "loaded": True}
+            if ss.my_loaded else {})
     r = _store(data=data, key="amb_store", default={"saved": None}, on_saved_change=lambda: None)
     saved = getattr(r, "saved", None)
     if not ss.my_loaded and saved is not None:
@@ -87,6 +118,7 @@ def init():
             d = {}
         ss.my = _clean(d.get("my", "[]"))
         ss.calls = _clean_calls(d.get("calls", "[]"))
+        ss.pf = _clean_pf(d.get("pf", "{}"))
         ss.my_loaded = True
 
 

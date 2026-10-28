@@ -203,6 +203,22 @@ if the data is thin or contradictory, choose "Hold" with "Low" conviction and sa
     return _generate(prompt, temperature=0.35)
 
 
+@st.cache_data(ttl=3 * 3600, show_spinner=False, max_entries=8)
+def sector_reads(blocks: str, stamp: str) -> dict:
+    """One line and a tone per sector, from that sector's headlines only."""
+    prompt = f"""{STYLE}
+
+For each sector below, read ONLY its headlines and return its tone for investors today and one sentence
+(max 28 words) on what is driving it. Tone is "Positive", "Negative" or "Mixed"; use "Mixed" when the
+headlines conflict or are thin. Do not mention sectors with no headlines.
+
+{blocks}
+
+Return JSON exactly like: {{"sectors": {{"<sector name>": {{"tone": "Positive", "read": "..."}}}}}}"""
+    out = _generate(prompt, temperature=0.2)
+    return out.get("sectors") or {}
+
+
 def stamp_6h(now) -> str:
     return f"{now:%Y-%m-%d}-{now.hour // 6}"
 

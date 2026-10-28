@@ -108,6 +108,8 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-tape-track{display:flex;width:max-content;animation:amb-scroll 70s linear infinite;}
 .amb-tape:hover .amb-tape-track{animation-play-state:paused;}
 .amb-tape-item{display:flex;gap:10px;align-items:baseline;padding:10px 20px;border-right:1px solid var(--line);white-space:nowrap;}
+.amb-tape-item[data-go]:hover{background:var(--raised);}
+.amb-tape-item[data-go]:hover .t-s{color:var(--gold);}
 .amb-tape-item .t-s{font-family:var(--display);font-weight:600;color:var(--text);font-size:.82rem;}
 .amb-tape-item .t-p{font-family:var(--mono);color:var(--text2);font-size:.82rem;}
 @keyframes amb-scroll{to{transform:translateX(-50%);}}
@@ -268,6 +270,51 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-note-body ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;}
 .amb-ul{margin:0;padding-left:18px;color:var(--text2);line-height:1.6;font-size:.93rem;}
 @media (max-width:860px){.amb-note-head,.amb-note-body{grid-template-columns:1fr;gap:12px;}}
+
+/* 10b2. NEWS, P&L ------------------------------------------------------------- */
+.amb-sector{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-height:100%;
+  transition:border-color .2s ease,background .2s ease;}
+.amb-sector[data-go]:hover{border-color:var(--line2);background:var(--raised);}
+.amb-sector.sel{border-color:var(--gold);}
+.amb-sector .top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.amb-sector .nm{font-family:var(--display);font-size:1.12rem;color:var(--text);}
+.amb-sector .meta{display:flex;gap:8px;align-items:center;margin-top:6px;color:var(--muted);font-size:.74rem;}
+.amb-sector p{margin:8px 0 0;color:var(--text2);font-size:.86rem;line-height:1.5;}
+.amb-nlist{display:flex;flex-direction:column;}
+.amb-nrow{padding:13px 2px;border-bottom:1px solid var(--line);}
+.amb-nrow a{color:var(--text)!important;font-weight:500;line-height:1.4;}
+.amb-nrow a:hover{color:var(--gold)!important;}
+.amb-nrow .s{color:var(--text2);font-size:.84rem;line-height:1.5;margin-top:4px;}
+.amb-nrow .m{color:var(--muted);font-size:.72rem;margin-top:5px;}
+.amb-nrow .amb-tk{margin-right:6px;padding:2px 7px;cursor:pointer;}
+.amb-sub-name{display:block;color:var(--muted);font-size:.72rem;font-weight:400;margin-top:1px;}
+.amb-table.pnl td{white-space:nowrap;}
+
+/* 10c. HEADER SEARCH ---------------------------------------------------------- */
+.st-key-amb_search{position:fixed!important;top:12px;right:190px;width:320px!important;z-index:999995;}
+.amb-search{position:relative;}
+.amb-search svg{position:absolute;left:11px;top:10px;width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:1.6;pointer-events:none;}
+.amb-search input{width:100%;height:36px;box-sizing:border-box;padding:0 34px 0 34px;border-radius:var(--r);border:1px solid var(--line2);
+  background:var(--card);color:var(--text);font:400 .9rem var(--body);outline:none;caret-color:var(--text)!important;
+  transition:border-color .15s ease,background .15s ease;}
+.amb-search input::placeholder{color:var(--muted);}
+.amb-search input:focus{border-color:var(--gold);background:var(--raised);}
+.amb-search kbd{position:absolute;right:9px;top:8px;font:500 .7rem var(--body);color:var(--muted);border:1px solid var(--line2);
+  border-radius:3px;padding:1px 6px;}
+.amb-search input:focus ~ kbd{display:none;}
+.amb-search ul{display:none;position:absolute;top:42px;left:0;right:0;margin:0;padding:4px;list-style:none;background:var(--raised);
+  border:1px solid var(--line2);border-radius:var(--r);box-shadow:0 14px 34px rgba(0,0,0,.45);max-height:360px;overflow:auto;}
+.amb-search.open ul{display:block;}
+.amb-search li{display:flex;gap:10px;align-items:baseline;padding:8px 10px;border-radius:var(--r-sm);cursor:pointer;}
+.amb-search li b{font:600 .86rem var(--body);color:var(--text);min-width:52px;}
+.amb-search li span{color:var(--text2);font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.amb-search li.on,.amb-search li[data-s]:hover{background:rgba(127,167,255,.12);}
+.amb-search li.hint{color:var(--muted);font-size:.82rem;cursor:default;}
+@media (max-width:1180px){.st-key-amb_search{width:230px!important;right:190px;}}
+@media (max-width:900px){.st-key-amb_search{position:static!important;width:100%!important;margin-bottom:6px;}}
+
+/* no text cursor on text that can't be edited (Chrome's caret browsing showed one everywhere) */
+body *:not(input):not(textarea):not([contenteditable="true"]){caret-color:transparent;}
 
 /* 11. PHONE ------------------------------------------------------------------ */
 @media (max-width:640px){
@@ -463,11 +510,15 @@ def section(title: str, right: str = "", eyebrow: str = "") -> None:
     show(f'<div class="amb-sec"><div><h2>{esc(title)}</h2></div><div class="right">{right}</div></div>')
 
 
-def tape(items: list[tuple[str, str, float | None]]) -> str:
-    cells = "".join(
-        f'<div class="amb-tape-item"><span class="t-s">{esc(a)}</span><span class="t-p">{b}</span>{pill(c)}</div>'
-        for a, b, c in items)
-    return f'<div class="amb-tape" aria-hidden="true"><div class="amb-tape-track">{cells}{cells}</div></div>'
+def tape(items: list[tuple]) -> str:
+    """Scrolling ticker tape. Items are (label, value, % change) or (label, value, % change, click target)."""
+    def cell(it):
+        a, b, c = it[:3]
+        go = it[3] if len(it) > 3 else None
+        return (f'<div class="amb-tape-item"{go_attr(go)}><span class="t-s">{esc(a)}</span>'
+                f'<span class="t-p">{b}</span>{pill(c)}</div>')
+    cells = "".join(cell(it) for it in items)
+    return f'<div class="amb-tape"><div class="amb-tape-track">{cells}{cells}</div></div>'
 
 
 def logo(url: str, sym: str, size: int = 34) -> str:
