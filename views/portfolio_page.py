@@ -3,6 +3,7 @@ portfolio lab (Markowitz) to see how the stocks you hold or follow combine."""
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 import numpy as np
 import pandas as pd
@@ -99,6 +100,28 @@ def _editor(pf: dict):
                 state.set_portfolio(_example())
             st.session_state.pop("pf_editor", None)
             st.rerun()
+        st.caption("Positions live in this browser only. To use them on your phone or another computer, download them "
+                   "here and upload the file there.")
+        d1, d2 = st.columns(2, gap="medium")
+        d1.download_button("Download my portfolio", json.dumps({"portfolio": pf, "calls": st.session_state.get("calls") or [],
+                                                                "my_stocks": state.my_list()}, indent=1),
+                           file_name="alejandro_market_brief_portfolio.json", mime="application/json", width="stretch",
+                           key="pf_download")
+        up = d2.file_uploader("Upload a portfolio file", type=["json"], key="pf_upload", label_visibility="collapsed")
+        if up is not None and st.session_state.get("_pf_uploaded") != up.file_id:
+            try:
+                d = json.loads(up.getvalue().decode("utf-8"))
+                state.set_portfolio(d.get("portfolio") or {})
+                for c in d.get("calls") or []:
+                    if isinstance(c, dict) and c.get("sym") and c.get("date"):
+                        state.save_call({k: c.get(k) for k in state.CALL_FIELDS})
+                for sym in d.get("my_stocks") or []:
+                    state.add(str(sym))
+                st.session_state["_pf_uploaded"] = up.file_id
+                st.session_state.pop("pf_editor", None)
+                st.rerun()
+            except Exception:
+                st.error("That file isn't a portfolio downloaded from this app.")
 
 
 def _positions():
@@ -166,6 +189,7 @@ def _positions():
              f'<td>{_signed_money(unrl)}</td><td>{T.pct(unrl / basis if basis else None, 1)}</td><td>100.0%</td></tr>')
     click(f'<div class="amb-wrap"><table class="amb-table pnl"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>',
           "pnl_tbl")
+    T.show('<div class="amb-swipe">Swipe the table sideways for P&amp;L and weights →</div>')
     T.show('<div class="amb-note">Daily P&amp;L = shares × today\'s change. Unrealized P&amp;L = market value − cost basis. '
            'Click a ticker to open its analysis.</div>')
 
@@ -335,8 +359,9 @@ def _lab():
                     line=dict(color=T.C["muted"], width=1, dash="dot"), hoverinfo="skip")
     fig.update_xaxes(title="Risk: annual volatility", ticksuffix="%", rangemode="tozero")
     fig.update_yaxes(title="Expected return (CAPM)", ticksuffix="%")
-    fig.update_layout(hovermode="closest")
-    T.plot(fig, 440)
+    fig.update_layout(hovermode="closest", legend=dict(orientation="h", y=-0.22, x=0, yanchor="top"),
+                      margin=dict(l=8, r=16, t=16, b=8))
+    T.plot(fig, 480)
 
     head = "".join(f"<th>{T.esc(s)}</th>" for s in have)
 

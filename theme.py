@@ -289,6 +289,14 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-nrow .amb-tk{margin-right:6px;padding:2px 7px;cursor:pointer;}
 .amb-sub-name{display:block;color:var(--muted);font-size:.72rem;font-weight:400;margin-top:1px;}
 .amb-table.pnl td{white-space:nowrap;}
+.amb-table.pnl th:first-child,.amb-table.pnl td:first-child{position:sticky;left:0;background:var(--card);z-index:1;}
+.amb-swipe{display:none;color:var(--muted);font-size:.72rem;margin:6px 0 0;}
+@media (max-width:640px){
+  .amb-table.pnl th:nth-child(2),.amb-table.pnl td:nth-child(2),.amb-table.pnl th:nth-child(6),.amb-table.pnl td:nth-child(6),
+  .amb-table.pnl th:nth-child(7),.amb-table.pnl td:nth-child(7){display:none;}
+  .amb-table.pnl td,.amb-table.pnl th{padding:9px 7px;font-size:.8rem;}
+  .amb-swipe{display:block;}
+}
 
 /* 10c. HEADER SEARCH ---------------------------------------------------------- */
 .st-key-amb_search{position:fixed!important;top:12px;right:190px;width:320px!important;z-index:999995;}
