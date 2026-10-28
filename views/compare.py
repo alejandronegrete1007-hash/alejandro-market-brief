@@ -155,9 +155,12 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
             res = [r for r in src.search(q) if r["symbol"] != sym]
         except Exception:
             res = []
+        t_ = q.upper().strip()
+        if not res and state.TICKER.match(t_) and t_ != sym:
+            res = [{"symbol": t_, "name": "add by ticker"}]
         if not res:
             st.caption("No US-traded listing found for that name. Companies listed only abroad (Seoul, Hong Kong, "
-                       "Tokyo…) aren't in the free data plans.")
+                       "Tokyo…) aren't in the free data plans. If you know its US over-the-counter ticker, type it.")
         for r in res[:6]:
             c1, c2 = st.columns([5, 1])
             otc = len(r["symbol"]) == 5 and r["symbol"][-1] in "FY"
