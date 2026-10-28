@@ -53,6 +53,7 @@ def _tag(items: list[dict]) -> dict[str, list[dict]]:
 
 
 def _company_news(symbols: list[str]) -> list[dict]:
+    src.prefetch([(src.company_news, s, 4) for s in symbols])
     items = []
     for s in symbols:
         try:
@@ -81,6 +82,8 @@ def render():
            'El Financiero, Google News and Finnhub, by market and by sector, plus the news on the stocks you hold and follow.'
            '</div></div></div>')
     with st.spinner("Reading the news feeds..."):
+        src.prefetch([(src.recent_headlines, "US"), (src.recent_headlines, "MX"), (src.sector_headlines,)]
+                     + [(src.try_quote, etf) for _, etf, _ in SECTORS])
         us, f1 = src.recent_headlines("US")
         mx, f2 = src.recent_headlines("MX")
         sec, f3 = src.sector_headlines()

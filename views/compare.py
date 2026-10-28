@@ -169,6 +169,8 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
     group = [sym] + picked
     rows = []
     with st.spinner("Loading competitor metrics..."):
+        src.prefetch([c for s in group for c in ((src.try_quote, s), (src.key_metrics, s), (src.recommendations, s),
+                                                 (src.profile, s))])
         for s in group:
             q = src.try_quote(s)
             try:

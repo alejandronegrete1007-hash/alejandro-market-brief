@@ -246,6 +246,8 @@ def _positions():
         return
     syms = list(dict.fromkeys(p["sym"] for p in pos))
     with st.spinner("Marking positions to market..."):
+        # one history request per symbol: SPY's history (for the "S&P same period" column) goes in once, not per purchase
+        src.prefetch([(src.try_quote, s) for s in syms + ["SPY"]] + [(src.try_history, "SPY")])
         quotes = {s: src.try_quote(s) for s in syms}
         spy_q = src.try_quote("SPY")
         lots = _lots(pos, quotes, spy_q["price"] if spy_q else None)

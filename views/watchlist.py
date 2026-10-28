@@ -23,6 +23,8 @@ def _remove_cb():
 
 def _cards(symbols: list[str], key: str, is_open: bool):
     with st.spinner("Loading prices..."):
+        src.prefetch([c for s in symbols for c in ((src.try_quote, s), (src.profile, s), (src.key_metrics, s),
+                                                   (src.next_earnings, s))])
         cards = [stock_card(s, state.market_of(s), is_open) for s in symbols]
     click(T.grid(cards, "g3 stack"), key)
 

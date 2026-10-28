@@ -21,6 +21,8 @@ def render():
     T.show('<div class="amb-hero"><div><h1>Peso, rates &amp; Mexican stocks</h1>'
            '<div class="sub">Official Banxico data and the Mexican companies that trade in New York.</div></div></div>')
 
+    src.prefetch([(mexico.indicators,), (mexico.fix_history, 400), (src.fred, "DFEDTARU"), (mexico.series_history, "target", 3),
+                  (mexico.series_history, "inflation", 4), (src.recent_headlines, "MX")])
     bx = _safe(mexico.indicators) or {}
     S = mexico.SERIES
     fix = _safe(mexico.fix_history, 400)

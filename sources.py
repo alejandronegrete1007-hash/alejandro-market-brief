@@ -36,6 +36,50 @@ DEMO = os.environ.get("AMB_DEMO") == "1"
 UA = "Mozilla/5.0 (Alejandro Market Brief; personal dashboard)"
 
 
+def prefetch(calls, workers: int = 8) -> None:
+    """Run independent fetches at the same time to fill the caches, instead of one after another.
+    `calls` is a list of (function, *args). Errors are ignored here: the page calls the same cached
+    functions afterwards and handles any failure there."""
+    from concurrent.futures import ThreadPoolExecutor
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+        ctx = get_script_run_ctx()
+    except Exception:
+        add_script_run_ctx, ctx = None, None
+
+    def run(call):
+        if add_script_run_ctx and ctx:
+            add_script_run_ctx(threading.current_thread(), ctx)
+        try:
+            call[0](*call[1:])
+        except Exception:
+            pass
+    calls = [c for c in calls if c]
+    if not calls:
+        return
+    with ThreadPoolExecutor(max_workers=min(workers, len(calls))) as ex:
+        list(ex.map(run, calls))
+
+
+def _parallel_feeds(pairs, market: str) -> tuple[list[dict], list[str]]:
+    """Parse several RSS feeds at once."""
+    from concurrent.futures import ThreadPoolExecutor
+    items, failed = [], []
+
+    def one(pair):
+        name, url = pair
+        try:
+            return name, _parse_feed(name, url, market), None
+        except Exception:
+            return name, [], name
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for name, got, err in ex.map(one, pairs):
+            items += got
+            if err:
+                failed.append(err)
+    return items, failed
+
+
 class DataError(Exception):
     """A source answered without usable data, or a key is missing."""
 
@@ -228,6 +272,7 @@ def peer_multiples(symbol: str, limit: int = 8) -> dict:
     """Median and quartiles of the peers' trailing multiples (Finnhub peer group).
     Multiples that are negative or above 200x are left out as not meaningful."""
     vals, used = {"pe": [], "ev_ebitda": [], "ps": []}, []
+    prefetch([(key_metrics, t) for t in peers(symbol)[:limit]])
     for t in peers(symbol)[:limit]:
         try:
             km = key_metrics(t)
@@ -617,12 +662,7 @@ def _parse_feed(source: str, url: str, market: str) -> list[dict]:
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def feeds(market: str) -> tuple[list[dict], list[str]]:
-    items, failed = [], []
-    for source, url in (US_FEEDS if market == "US" else MX_FEEDS).items():
-        try:
-            items += _parse_feed(source, url, market)
-        except Exception:
-            failed.append(source)
+    items, failed = _parallel_feeds(list((US_FEEDS if market == "US" else MX_FEEDS).items()), market)
     if market == "US":
         try:
             for n in _fh("/news", category="general") or []:
@@ -637,12 +677,7 @@ def feeds(market: str) -> tuple[list[dict], list[str]]:
 @st.cache_data(ttl=1800, show_spinner=False)
 def sector_headlines() -> tuple[list[dict], list[str]]:
     """Headlines from the sector feeds, last 36 hours."""
-    items, failed = [], []
-    for source, url in SECTOR_FEEDS.items():
-        try:
-            items += _parse_feed(source.replace("CNBC ", "CNBC · "), url, "US")
-        except Exception:
-            failed.append(source)
+    items, failed = _parallel_feeds([(k.replace("CNBC ", "CNBC · "), v) for k, v in SECTOR_FEEDS.items()], "US")
     cutoff = dt.datetime.now(ET) - dt.timedelta(hours=36)
     return dedupe([i for i in items if i["time"] and i["time"] >= cutoff]), failed
 

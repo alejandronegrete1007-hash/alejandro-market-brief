@@ -43,6 +43,11 @@ def render():
     if not sym:
         return
     market = state.market_of(sym)
+    etf_or_mx = src.is_etf(sym) or market == "MX"
+    src.prefetch([(src.try_quote, sym), (src.profile, sym), (src.us_market_status,), (src.next_earnings, sym),
+                  (src.company_news, sym), (src.key_metrics, sym), (src.recommendations, sym), (src.risk_free,),
+                  (src.peer_multiples, sym), None if etf_or_mx else (src.sec_facts, sym),
+                  (src.try_history, sym), (src.try_history, "SPY")])
     q = src.try_quote(sym)
     if not q:
         st.error(f"No quote for {sym}. Check the ticker (US-listed stocks, ADRs and ETFs).")

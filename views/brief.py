@@ -54,6 +54,13 @@ def render():
     is_open = status["open"]
     _hero(status)
 
+    mx_syms = state.mx_leaders()[0]
+    src.prefetch([(src.try_quote, s) for s in [x for _, x in US_SET] + ["EWW"] + [e for _, e in SECTORS] + state.US_LEADERS
+                  + mx_syms + state.my_list()[:8]]
+                 + [(src.fred, sid) for _, sid in CURVE] + [(src.fred, "DFEDTARU"), (src.bitcoin,), (mexico.indicators,),
+                                                            (mexico.fix_history, 400), (mexico.leaderboard,),
+                                                            (src.recent_headlines, "US"), (src.recent_headlines, "MX"),
+                                                            (src.known_tickers,)], workers=10)
     quotes = {sym: src.try_quote(sym) for _, sym in US_SET}
     eww = src.try_quote("EWW")
     btc = _safe(src.bitcoin)

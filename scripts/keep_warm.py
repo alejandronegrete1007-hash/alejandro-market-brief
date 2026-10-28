@@ -41,9 +41,9 @@ def wait_until_done(page, budget: int) -> str:
             spinning = target.locator("[data-testid='stSpinner']").count() > 0
         except Exception:
             ready = running = spinning = False
-        if ready and not running and not spinning and time.time() - start > 10:
+        if ready and not running and not spinning and time.time() - start > 3:
             return f"done in {time.time() - start:.0f}s"
-        time.sleep(3)
+        time.sleep(1)
     return f"still running after {budget}s (left it warming)"
 
 
