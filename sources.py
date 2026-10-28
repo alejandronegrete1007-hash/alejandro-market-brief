@@ -179,7 +179,47 @@ ETFS = {
     "SMH": "Semiconductors", "SOXX": "Semiconductors", "KRE": "Regional banks", "EEM": "Emerging markets",
     "EWZ": "Brazil", "FXI": "China large caps", "VTI": "US total market", "VOO": "S&P 500", "IBIT": "Bitcoin ETF",
     "SLV": "Silver", "UNG": "Natural gas", "ITA": "Aerospace & defense", "JETS": "Airlines",
+    "XLC": "Communication services", "XBI": "Biotech", "IYT": "Transportation", "XHB": "Homebuilders",
+    "XRT": "Retail", "PEJ": "Leisure & entertainment", "IGV": "Software",
 }
+
+# Finnhub industry -> the sector ETF that best represents it (first keyword match wins).
+SECTOR_MAP = [
+    ("semiconductor", "SMH"), ("software", "IGV"), ("technology", "XLK"), ("communications", "XLK"),
+    ("electrical equipment", "XLK"), ("biotechnology", "XBI"), ("life sciences", "XLV"), ("pharmaceutical", "XLV"),
+    ("health", "XLV"), ("oil", "XLE"), ("energy", "XLE"), ("gas", "XLE"), ("bank", "KRE"), ("insurance", "XLF"),
+    ("financial", "XLF"), ("capital markets", "XLF"), ("real estate", "XLRE"), ("reit", "XLRE"), ("utilities", "XLU"),
+    ("airline", "JETS"), ("aerospace", "ITA"), ("defense", "ITA"), ("logistics", "IYT"), ("road", "IYT"),
+    ("marine", "IYT"), ("transportation", "IYT"), ("media", "XLC"), ("telecommunication", "XLC"),
+    ("entertainment", "XLC"), ("retail", "XRT"), ("hotels", "PEJ"), ("leisure", "PEJ"), ("automobile", "XLY"),
+    ("auto components", "XLY"), ("textiles", "XLY"), ("consumer", "XLY"), ("beverages", "XLP"), ("food", "XLP"),
+    ("tobacco", "XLP"), ("chemicals", "XLB"), ("metals", "XLB"), ("mining", "XLB"), ("packaging", "XLB"),
+    ("construction", "XLI"), ("building", "XLI"), ("machinery", "XLI"), ("industrial", "XLI"), ("commercial services", "XLI"),
+    ("professional services", "XLI"), ("trading companies", "XLI"),
+]
+SECTOR_CHOICES = ["SMH", "IGV", "XLK", "XLC", "XLV", "XBI", "XLE", "XLF", "KRE", "XLY", "XRT", "XLP", "XLI", "ITA",
+                  "IYT", "JETS", "XLB", "XLU", "XLRE", "PEJ", "XHB"]
+
+
+def sector_etf(industry: str) -> str:
+    low = (industry or "").lower()
+    for word, etf in SECTOR_MAP:
+        if word in low:
+            return etf
+    return "XLK" if not low else "SPY"
+
+
+@st.cache_data(ttl=7 * 86400, show_spinner=False)
+def peers(symbol: str) -> list[str]:
+    """Finnhub's list of comparable companies (same sub-industry), US tickers only."""
+    raw = _fh("/stock/peers", symbol=symbol) or []
+    known = known_tickers()
+    out = []
+    for t in raw:
+        t = str(t).upper()
+        if t != symbol.upper() and US_TICKER.match(t) and (not known or t in known) and t not in out:
+            out.append(t)
+    return out
 
 
 def is_etf(symbol: str) -> bool:

@@ -107,7 +107,7 @@ def _bx_rows(sid: str, start: str, end: str) -> list[dict]:
     return [{"fecha": d.strftime("%d/%m/%Y"), "dato": f"{x:.4f}"} for d, x in zip(idx, v)]
 
 
-DEMO_TICKERS = ["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "AMX", "FMX", "KOF", "CX", "ASR", "PAC", "OMAB", "TV"]
+DEMO_TICKERS = ["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "AMD", "INTC", "HPQ", "HPE", "SMCI", "AMX", "FMX", "KOF", "CX", "ASR", "PAC", "OMAB", "TV"]
 
 BX_TITLES = {"SF43718": "Tipo de cambio Pesos por dólar E.U.A. Para solventar obligaciones (FIX)",
              "SF61745": "Tasa objetivo", "SF43783": "TIIE a 28 días", "SF43936": "Cetes a 28 días",
@@ -137,6 +137,8 @@ def fake_json(url: str, p: dict):
                                "revenueGrowthTTMYoy": 34.1, "52WeekHigh": LEVEL.get(sym, 100) * 1.08,
                                "52WeekLow": LEVEL.get(sym, 100) * 0.4, "beta": 1.3,
                                "yearToDatePriceReturnDaily": YTD.get(sym, 0.1) * 100, "52WeekPriceReturnDaily": YTD.get(sym, 0.1) * 120}}
+        if "/stock/peers" in url:
+            return {"MU": ["MU", "NVDA", "SNDK", "AMD", "INTC"], "DELL": ["DELL", "HPQ", "HPE", "SMCI"]}.get(sym, [sym, "NVDA", "MU"])
         if "/stock/recommendation" in url:
             return [{"period": f"2026-{m:02d}-01", "strongBuy": 8 + m % 3, "buy": 14, "hold": 9 - m % 2, "sell": 1, "strongSell": 0,
                      "symbol": sym} for m in range(10, 4, -1)]

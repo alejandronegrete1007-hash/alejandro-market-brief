@@ -75,3 +75,48 @@ def test_filings_annual_keeps_full_years_and_latest_restatement():
 def test_filings_build_rejects_ifrs_filers():
     with pytest.raises(filings.FilingsError):
         filings.build({"facts": {"ifrs-full": {}}})
+
+
+def test_rebased_starts_at_100_and_window_return():
+    df = pd.DataFrame({"a": [50.0, 100.0, 150.0], "b": [10.0, 10.0, 12.0]},
+                      index=pd.to_datetime(["2025-12-31", "2026-01-02", "2026-03-02"]))
+    r = Q.rebased(df, Q.window_start(df.index[-1], "YTD"))
+    assert list(r.iloc[0]) == [100.0, 100.0]
+    assert r["a"].iloc[-1] == pytest.approx(300.0)
+    assert Q.window_return(df["a"], Q.window_start(df.index[-1], "YTD")) == pytest.approx(2.0)
+
+
+def test_alpha_zero_for_pure_beta_and_positive_with_drift():
+    rng = np.random.default_rng(3)
+    m = prices(100 * np.cumprod(1 + rng.normal(0.0004, 0.01, 400)))
+    mr = m.pct_change().fillna(0).values
+    copy = prices(100 * np.cumprod(1 + 1.5 * mr))
+    assert Q.alpha(copy, m, rf=0.0) == pytest.approx(0.0, abs=0.01)
+    drift = prices(100 * np.cumprod(1 + 1.5 * mr + 0.0004))
+    assert Q.alpha(drift, m, rf=0.0) == pytest.approx(0.0004 * 252, rel=0.1)
+
+
+def test_correlation_and_capture():
+    rng = np.random.default_rng(4)
+    m = prices(100 * np.cumprod(1 + rng.normal(0, 0.01, 600)))
+    two_x = prices(100 * np.cumprod(1 + 2 * m.pct_change().fillna(0).values))
+    assert Q.correlation(two_x, m) > 0.95
+    up, dn = Q.capture(two_x, m)
+    assert up == pytest.approx(2.0, rel=0.15) and dn == pytest.approx(2.0, rel=0.15)
+
+
+def test_decompose_adds_up():
+    d = Q.decompose(0.50, 0.30, 0.10)
+    assert d == {"market": 0.10, "sector": pytest.approx(0.20), "stock": pytest.approx(0.20)}
+    assert sum(d.values()) == pytest.approx(0.50)
+
+
+def test_simulation_zero_drift_is_centred_on_today():
+    rng = np.random.default_rng(5)
+    c = prices(100 * np.exp(np.cumsum(rng.normal(0.003, 0.02, 600))))   # strong past uptrend
+    paths = Q.simulate(c, horizon=126, n=6000)
+    median_log = np.median(np.log(paths[:, -1] / c.iloc[-1]))
+    assert abs(median_log) < 0.03                                          # the uptrend is not extrapolated
+    f = Q.fan(paths)
+    assert (f[5] <= f[50]).all() and (f[50] <= f[95]).all()
+    assert Q.prob_touch(paths, c.iloc[-1] * 0.01, above=False) == 0.0

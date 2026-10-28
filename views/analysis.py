@@ -17,6 +17,7 @@ import sources as src
 import state
 import theme as T
 import valuation as V
+from views import compare, outlook
 from views.common import name_of
 
 
@@ -106,14 +107,20 @@ def render():
     except Exception:
         news = []
     ctx["news"] = news
-    t1, t2, t3, t4 = st.tabs(["Valuation", "Analysts & our take", "Chart & risk", "News"])
-    with t3:
+    t_val, t_out, t_cmp, t_take, t_chart, t_news = st.tabs(
+        ["Valuation", "Outlook", "Compare", "Analysts & our take", "Chart & risk", "News"])
+    # Order matters: later tabs (and the AI take) use what earlier ones computed.
+    with t_chart:
         _chart_tab(sym, h, close, q, m, vol, ctx)
-    with t1:
+    with t_val:
         _valuation_tab(sym, q, m, rf, rf_label, close, market, ctx)
-    with t2:
+    with t_out:
+        outlook.render(sym, close, q, ctx)
+    with t_cmp:
+        compare.render(sym, close, prof, rf, market, ctx)
+    with t_take:
         _take_tab(sym, ctx)
-    with t4:
+    with t_news:
         T.show(T.news_list(news, 12))
     T.footer("Not investment advice · statistics describe the past, they don't predict the future")
 
@@ -486,6 +493,10 @@ def _facts(ctx) -> str:
     else:
         lines.append("DCF: not available for this security.")
     lines.append(f"Analyst consensus: {ctx.get('consensus') or 'not available'}")
+    for k_, lbl in (("outlook", "Price simulation"), ("vs_market", "Versus the market"),
+                    ("vs_sector", "Versus its sector"), ("vs_peers", "Relative valuation")):
+        if ctx.get(k_):
+            lines.append(f"{lbl}: {ctx[k_]}")
     if ctx.get("er"):
         lines.append(f"Next earnings date: {ctx['er']['date']} {ctx['er']['when']}")
     return "\n".join(lines)

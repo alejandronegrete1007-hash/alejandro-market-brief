@@ -12,7 +12,7 @@ Every morning it answers three questions in about five minutes: what moved, why,
 | **Today** | Clickable cards for US indices (via ETFs), gold, oil, Bitcoin, the 10Y yield, the peso (Banxico FIX), Banxico's rate, inflation, CETES, TIIE and the real policy rate. An AI brief where every story lists **the markets and tickers it moves** (▲ ▼ ◆), each ticker one click from its analysis, and links to its sources |
 | **México** | Banxico charts (USD/MXN, Banxico vs Fed, inflation vs the 3% ± 1 target) and a live **YTD ranking of Mexican companies listed in New York** |
 | **Watchlist** | S&P 500 leaders of 2026 and the live Mexico top 5 (both fixed), plus **My stocks**: any tickers you add, saved in the browser |
-| **Analysis** | Chart with 50/200-day averages, risk metrics and statistical ranges; a **DCF valued four ways** (levered and unlevered, perpetuity and exit multiple) with market vs intrinsic value, reverse DCF, 5-year projection, sensitivity tables and a football field; **Wall Street consensus**; and an AI **Buy / Hold / Sell lean** with bull/base/bear cases |
+| **Analysis** | Chart with 50/200-day averages, risk metrics and statistical ranges; a **DCF valued four ways** (levered and unlevered, perpetuity and exit multiple) with market vs intrinsic value, reverse DCF, 5-year projection, sensitivity tables and a football field; an **Outlook** fan from 4,000 bootstrap-simulated paths with odds and key levels; a **Compare** tab vs the market (alpha, beta, capture), the sector ETF (return decomposition) and a peer comps table; **Wall Street consensus**; and an AI **Buy / Hold / Sell lean** with bull/base/bear cases |
 | **Methodology** | Every formula and source, plus a live data-health check |
 
 ## Valuation approach

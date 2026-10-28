@@ -71,6 +71,18 @@ in a straight line from last year's level to your year-5 target; D&A and capex a
 
 **Reverse DCF.** Solves for the 5-year growth rate that makes the unlevered perpetuity value equal today's price.
 
+**Outlook (price simulation).** 4,000 six-month paths. Each simulated day replays a randomly chosen real daily move
+from the last two years (a bootstrap), re-centred to the drift you pick: neutral (0%), market average (+8% a year) or the
+recent trend (capped at ±30%). Because the moves are real, crash days are included, which a normal-distribution model
+understates. The fan shows the 5/25/50/75/95th percentile paths; probabilities are the share of paths that do something
+(end higher, fall 20% at some point, reach the DCF value). Odds of a model, not a forecast.
+
+**Compare.** All lines are rebased to 100 at the start of the window. Beta, correlation and up/down capture use two
+years of weekly returns; alpha is Jensen's alpha over one year (return beyond what beta and the market explain). The
+sector split is additive: market return + sector over market + stock over sector = the stock's return. Competitors come
+from Finnhub's peer list; the comps table colours the stock's cell green when it beats the peer median (a cheaper
+multiple, or higher growth, margin, return or analyst score).
+
 **Analyst consensus.** Monthly buy / hold / sell counts from the analysts covering the stock (Finnhub recommendation
 trends). Score: strong buy = 5 … strong sell = 1.
 
