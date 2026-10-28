@@ -107,8 +107,8 @@ def render():
     except Exception:
         news = []
     ctx["news"] = news
-    t_val, t_out, t_cmp, t_take, t_chart, t_news = st.tabs(
-        ["Valuation", "Outlook", "Compare", "Analysts & our take", "Chart & risk", "News"])
+    t_chart, t_val, t_out, t_cmp, t_take, t_news = st.tabs(
+        ["Chart & risk", "Valuation", "Outlook", "Compare", "Analysts & our take", "News"])
     # Order matters: later tabs (and the AI take) use what earlier ones computed.
     with t_chart:
         _chart_tab(sym, h, close, q, m, vol, ctx)
