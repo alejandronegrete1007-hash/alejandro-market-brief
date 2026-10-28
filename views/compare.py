@@ -182,7 +182,9 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
                 score = (sum(int(r0.get(k) or 0) * w for k, w in (("strongBuy", 5), ("buy", 4), ("hold", 3), ("sell", 2), ("strongSell", 1))) / n) if n else None
             except Exception:
                 score = None
-            rows.append({"Ticker": s, "Price": q["price"] if q else None, "Mkt cap": src.profile(s)["mcap"] or None,
+            pr = src.profile(s)
+            rows.append({"Ticker": s, "Price": q["price"] if q else None,
+                         "Mkt cap": (pr["mcap"] or None) if pr.get("currency", "USD") == "USD" else None,
                          "YTD": km.get("ytd"), "1Y": km.get("r52"), "P/E": km.get("pe"), "Fwd P/E": km.get("fwd_pe"),
                          "EV/EBITDA": km.get("ev_ebitda"), "P/S": km.get("ps"), "Net margin": km.get("net_margin"),
                          "Rev. growth": km.get("rev_growth"), "ROE": km.get("roe"), "Analysts": score})

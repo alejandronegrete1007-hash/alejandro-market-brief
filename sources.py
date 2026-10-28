@@ -239,10 +239,28 @@ def known_tickers() -> frozenset:
 US_TICKER = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
 
 
+# Big foreign companies whose US-traded ticker (ADR or over-the-counter) name search often misses.
+FOREIGN_US_TICKERS = {
+    "samsung": ("SSNLF", "Samsung Electronics (US OTC)"), "xiaomi": ("XIACY", "Xiaomi (US ADR, OTC)"),
+    "tencent": ("TCEHY", "Tencent (US ADR, OTC)"), "byd": ("BYDDY", "BYD (US ADR, OTC)"),
+    "nestle": ("NSRGY", "Nestlé (US ADR, OTC)"), "nestlé": ("NSRGY", "Nestlé (US ADR, OTC)"),
+    "lvmh": ("LVMUY", "LVMH (US ADR, OTC)"), "siemens": ("SIEGY", "Siemens (US ADR, OTC)"),
+    "roche": ("RHHBY", "Roche (US ADR, OTC)"), "nintendo": ("NTDOY", "Nintendo (US ADR, OTC)"),
+    "toyota": ("TM", "Toyota (NYSE ADR)"), "sony": ("SONY", "Sony (NYSE ADR)"), "tsmc": ("TSM", "TSMC (NYSE ADR)"),
+    "taiwan semiconductor": ("TSM", "TSMC (NYSE ADR)"), "alibaba": ("BABA", "Alibaba (NYSE ADR)"),
+    "asml": ("ASML", "ASML (Nasdaq)"), "sap": ("SAP", "SAP (NYSE ADR)"), "novo nordisk": ("NVO", "Novo Nordisk (NYSE ADR)"),
+}
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
 def search(query: str) -> list[dict]:
-    res = (_fh("/search", q=query) or {}).get("result") or []
+    low = query.lower().strip()
     out, seen = [], set()
+    for name, (sym, label) in FOREIGN_US_TICKERS.items():
+        if len(low) >= 3 and (low in name or name in low) and sym not in seen:
+            seen.add(sym)
+            out.append({"symbol": sym, "name": label})
+    res = (_fh("/search", q=query) or {}).get("result") or []
     for r in res:
         sym = (r.get("symbol") or "").upper()
         if r.get("type") in ("Common Stock", "ADR", "GDR", "ETP", "NY Reg Shrs") and US_TICKER.match(sym) and sym not in seen:
