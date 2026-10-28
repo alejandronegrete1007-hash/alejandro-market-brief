@@ -59,7 +59,9 @@ def get_json(url: str, params: dict | None = None, headers: dict | None = None):
         raise DataError("Rate limit reached for this source. Give it a minute.")
     if r.status_code in (401, 403):
         raise DataError(f"The source rejected the key ({r.status_code}). Check it in Secrets.")
-    r.raise_for_status()
+    if r.status_code >= 400:
+        body = re.sub(r"\s+", " ", r.text)[:240]
+        raise DataError(f"HTTP {r.status_code} from {url.split('/')[2]}: {body}")
     return r.json()
 
 
@@ -330,10 +332,7 @@ def _bx(path: str):
     return get_json(BX + path, headers={"Bmx-Token": _need("BANXICO_TOKEN"), "Accept": "application/json"})
 
 
-@st.cache_data(ttl=3 * 3600, show_spinner=False)
-def banxico_latest(ids: tuple[str, ...]) -> dict[str, dict]:
-    """Latest observation of each series, with Banxico's own title for it."""
-    d = _bx(f"/{','.join(ids)}/datos/oportuno")
+def _bx_parse_latest(d: dict) -> dict[str, dict]:
     out = {}
     for s in d.get("bmx", {}).get("series", []):
         datos = [x for x in s.get("datos") or [] if _bx_num(x.get("dato")) is not None]
@@ -342,6 +341,24 @@ def banxico_latest(ids: tuple[str, ...]) -> dict[str, dict]:
             out[s["idSerie"]] = {"value": _bx_num(x["dato"]), "date": dt.datetime.strptime(x["fecha"], "%d/%m/%Y").date(),
                                  "title": s.get("titulo", "")}
     return out
+
+
+@st.cache_data(ttl=3 * 3600, show_spinner=False)
+def banxico_latest(ids: tuple[str, ...]) -> dict[str, dict]:
+    """Latest observation of each series, with Banxico's own title for it.
+    One request for all; if Banxico rejects it, ask series by series and keep what works."""
+    try:
+        return _bx_parse_latest(_bx(f"/{','.join(ids)}/datos/oportuno"))
+    except DataError as first:
+        out, errors = {}, []
+        for sid in ids:
+            try:
+                out.update(_bx_parse_latest(_bx(f"/{sid}/datos/oportuno")))
+            except Exception as e:
+                errors.append(f"{sid}: {e}")
+        if not out:
+            raise DataError(f"Banxico: {first}") from None
+        return out
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False)

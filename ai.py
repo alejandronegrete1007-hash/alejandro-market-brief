@@ -37,45 +37,57 @@ def _version(name: str) -> float:
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def pick_model() -> str:
-    """Ask Google which models this key can use and take the newest fast one.
-    (Fixed model names get retired and start returning 404.)"""
+def models() -> list[str]:
+    """Text models this key can use, best first: newest fast 'flash' models, then the rest.
+    (Fixed model names get retired and start returning 404, so the app asks Google.)"""
     forced = src.secret("GEMINI_MODEL")
-    if forced:
-        return forced
     d = src.get_json(f"{API}/models", {"pageSize": 200}, headers={"x-goog-api-key": _key()})
     names = [m["name"].split("/")[-1] for m in d.get("models", [])
              if "generateContent" in (m.get("supportedGenerationMethods") or [])]
     names = [n for n in names if not any(x in n for x in ("preview", "exp", "tts", "image", "live", "audio"))] or names
+    ranked: list[str] = [forced] if forced else []
     for pat in PREFERRED:
-        hits = [n for n in names if re.search(pat, n)]
-        if hits:
-            return max(hits, key=_version)
-    if not names:
+        for n in sorted((n for n in names if re.search(pat, n)), key=_version, reverse=True):
+            if n not in ranked:
+                ranked.append(n)
+    ranked += [n for n in names if n not in ranked]
+    if not ranked:
         raise AIError("This Gemini key has no text models available.")
-    return names[0]
+    return ranked
+
+
+def pick_model() -> str:
+    return models()[0]
 
 
 def _generate(prompt: str, temperature: float = 0.3) -> dict:
-    model = pick_model()
+    if src.DEMO:
+        import demo
+        return demo.fake_ai(prompt)
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": temperature, "responseMimeType": "application/json"},
     }
-    if src.DEMO:
-        import demo
-        return demo.fake_ai(prompt)
-    r = requests.post(f"{API}/models/{model}:generateContent", json=body,
-                      headers={"x-goog-api-key": _key()}, timeout=60)
-    if r.status_code == 429:
-        raise AIError("Gemini's free quota is used up for now. Try again in a few minutes.")
-    if r.status_code >= 400:
-        raise AIError(f"Gemini returned an error ({r.status_code}).")
-    try:
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()).strip())
-    except Exception as e:
-        raise AIError("Gemini's answer couldn't be read.") from e
+    last = "no model tried"
+    for model in models()[:4]:  # busy (503), retired (404) or out of quota (429): try the next one
+        try:
+            r = requests.post(f"{API}/models/{model}:generateContent", json=body,
+                              headers={"x-goog-api-key": _key()}, timeout=60)
+        except requests.RequestException as e:
+            last = f"{model}: {e.__class__.__name__}"
+            continue
+        if r.status_code in (404, 429, 500, 503):
+            last = f"{model} returned {r.status_code}"
+            continue
+        if r.status_code >= 400:
+            raise AIError(f"Gemini returned an error ({r.status_code}).")
+        try:
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()).strip())
+        except Exception:
+            last = f"{model}: unreadable answer"
+            continue
+    raise AIError(f"Gemini is busy or out of free quota right now ({last}). Try again in a few minutes.")
 
 
 STYLE = """Write like a sharp buy-side analyst explaining the market to a smart friend:

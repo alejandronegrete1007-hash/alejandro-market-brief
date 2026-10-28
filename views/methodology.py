@@ -78,7 +78,12 @@ Stories citing nothing real are dropped. It is told never to invent figures, tar
             ("Finnhub quote (SPY)", lambda: f"{src.quote('SPY')['price']:.2f}"),
             ("Twelve Data history (SPY)", lambda: f"{len(src.history('SPY'))} sessions"),
             ("FRED 10Y", lambda: f"{src.fred('DGS10').iloc[-1]:.2f}%"),
-            ("Banxico series", lambda: " | ".join(f"{k}: {v['value']} · {v['title'][:60]}" for k, v in mexico.indicators().items())),
+        ] + [
+            (f"Banxico {key} ({sid})",
+             lambda sid=sid: " | ".join(f"{v['value']} on {v['date']} · {v['title'][:70]}"
+                                        for v in src._bx_parse_latest(src._bx(f"/{sid}/datos/oportuno")).values()) or "no data")
+            for key, sid in mexico.SERIES.items()
+        ] + [
             ("CoinGecko", lambda: f"{src.bitcoin()['price']:,.0f}"),
             ("SEC tickers", lambda: f"{len(src.sec_ciks())} companies"),
             ("US feeds", lambda: f"{len(src.feeds('US')[0])} items, failed: {src.feeds('US')[1] or 'none'}"),
