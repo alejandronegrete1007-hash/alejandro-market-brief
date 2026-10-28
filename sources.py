@@ -42,9 +42,10 @@ class DataError(Exception):
 def secret(name: str, default=None):
     v = os.environ.get(name)
     if v:
-        return v
+        return v.strip()
     try:
-        return st.secrets[name]
+        v = st.secrets[name]
+        return v.strip() if isinstance(v, str) else v
     except Exception:
         return default
 
