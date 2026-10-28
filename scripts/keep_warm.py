@@ -60,10 +60,13 @@ def main() -> int:
                 if i == 0 and wake_if_asleep(page):
                     time.sleep(45)
                     page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                print("  " + wait_until_done(page, PAGE_BUDGET), flush=True)
+                res = wait_until_done(page, PAGE_BUDGET)
+                print("  " + res, flush=True)
+                print(f"::notice title=warm {path}::{res}", flush=True)
             except Exception as e:  # keep going; one slow page should not stop the rest
                 failures += 1
                 print(f"  failed: {e}", flush=True)
+                print(f"::warning title=warm {path}::failed: {str(e)[:200]}", flush=True)
         browser.close()
     return 1 if failures == len(PAGES) else 0
 

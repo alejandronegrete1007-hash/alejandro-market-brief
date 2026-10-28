@@ -35,8 +35,31 @@ TAGS = {
     "pretax": ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
                "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
                "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic"],
+    "gross_profit": ["GrossProfit"],
+    "cogs": ["CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold"],
+    "sbc": ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
     "interest": ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt",
                  "InterestAndDebtExpense", "InterestPaidNet"],
+}
+
+
+# Balance-sheet items (point in time), read at each fiscal year-end.
+BALANCE = {
+    "assets": ["Assets"],
+    "assets_current": ["AssetsCurrent"],
+    "liabilities_current": ["LiabilitiesCurrent"],
+    "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+    "receivables": ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"],
+    "inventory": ["InventoryNet"],
+    "payables": ["AccountsPayableCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"],
+    "cash": ["CashAndCashEquivalentsAtCarryingValue",
+             "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
+    "st_investments": ["MarketableSecuritiesCurrent", "ShortTermInvestments",
+                       "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+    "debt_total": ["LongTermDebt"],
+    "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
+    "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
+    "short_borrowings": ["ShortTermBorrowings", "CommercialPaper"],
 }
 
 
@@ -66,6 +89,38 @@ def annual(facts: dict, tags: list[str], unit: str = "USD") -> pd.Series:
         s = pd.Series(df["val"].astype(float).values, index=pd.to_datetime(df["end"])).sort_index()
         combined = s if combined is None else combined.combine_first(s)
     return combined if combined is not None else pd.Series(dtype=float)
+
+
+def annual_instant(facts: dict, tags: list[str], unit: str = "USD") -> pd.Series:
+    """Balance-sheet values reported in 10-Ks, indexed by the balance-sheet date."""
+    gaap, combined = _gaap(facts), None
+    for tag in tags:
+        rows = [r for r in gaap.get(tag, {}).get("units", {}).get(unit, [])
+                if r.get("form") in ANNUAL_FORMS and not r.get("start")]
+        if not rows:
+            continue
+        df = pd.DataFrame(rows).sort_values("filed").drop_duplicates("end", keep="last")
+        s = pd.Series(df["val"].astype(float).values, index=pd.to_datetime(df["end"])).sort_index()
+        combined = s if combined is None else combined.combine_first(s)
+    return combined if combined is not None else pd.Series(dtype=float)
+
+
+def _at(series: pd.Series, dates: pd.DatetimeIndex) -> pd.Series:
+    """Values on (or within a week of) each fiscal year-end."""
+    if series.empty:
+        return pd.Series(index=dates, dtype=float)
+    return series.reindex(dates, method="nearest", tolerance=pd.Timedelta(days=7))
+
+
+def balance_history(facts: dict, dates: pd.DatetimeIndex) -> pd.DataFrame:
+    """One row per fiscal year-end with the balance-sheet items the ratios need."""
+    df = pd.DataFrame({k: _at(annual_instant(facts, tags), dates) for k, tags in BALANCE.items()}, index=dates)
+    total = df["debt_total"]
+    parts = df["debt_noncurrent"].fillna(0) + df["debt_current"].fillna(0)
+    df["debt"] = total.where(total.notna(), parts.where(df["debt_noncurrent"].notna() | df["debt_current"].notna()))
+    df["debt"] = df["debt"].fillna(0) + df["short_borrowings"].fillna(0)
+    df["cash_all"] = df["cash"].fillna(0) + df["st_investments"].fillna(0)
+    return df
 
 
 def latest(facts: dict, tags: list[str], unit: str = "USD") -> dict | None:
@@ -146,6 +201,19 @@ def build(facts: dict) -> dict:
         return float(min(max(n / d, lo), hi))
 
     rev0 = last(rev)
+    gp, cogs, sbc = (annual(facts, TAGS[k]) for k in ("gross_profit", "cogs", "sbc"))
+    if gp.empty and not cogs.empty:
+        gp = rev.sub(cogs, fill_value=None).dropna()
+    bal = balance_history(facts, rev.index) if not rev.empty else pd.DataFrame()
+    nwc_pct = None
+    if not bal.empty:
+        lastb = bal.iloc[-1]
+        if pd.notna(lastb.get("receivables")) or pd.notna(lastb.get("inventory")):
+            nwc = (0 if pd.isna(lastb["receivables"]) else lastb["receivables"]) + \
+                  (0 if pd.isna(lastb["inventory"]) else lastb["inventory"]) - \
+                  (0 if pd.isna(lastb["payables"]) else lastb["payables"])
+            if rev0:
+                nwc_pct = float(min(max(nwc / rev0, -0.2), 0.4))
     ebitda = (ebit.add(da.reindex(ebit.index).fillna(0.0)) if not ebit.empty else pd.Series(dtype=float))
     tail = lambda s: s.iloc[-8:]  # noqa: E731
     return {
@@ -162,4 +230,7 @@ def build(facts: dict) -> dict:
         "interest": last(interest),
         "cash": cash_total, "debt": debt, "net_debt": debt - cash_total, "balance_date": ref,
         "shares": sh["val"], "shares_source": sh["source"], "notes": notes,
+        "gross_profit": tail(gp), "sbc": tail(sbc), "tax_expense": tail(tax_exp), "pretax": tail(pretax),
+        "interest_hist": tail(interest), "balance": bal.iloc[-8:] if not bal.empty else bal,
+        "nwc_pct": nwc_pct,
     }

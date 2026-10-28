@@ -75,3 +75,41 @@ def test_verdict_bands():
     assert V.verdict(130, 100)[0] == "Undervalued"
     assert V.verdict(105, 100)[0] == "Fairly valued"
     assert V.verdict(80, 100)[0] == "Overvalued"
+
+
+def test_terminal_year_is_normalized_to_perpetual_growth():
+    # When explicit growth equals perpetual growth, the normalized year 6 is just year 5 grown at g.
+    a = replace(BASE, growth=0.025)
+    v = V.value(a)
+    last = v["projection"].iloc[-1]
+    assert v["terminal"]["fcff"] == pytest.approx(last["fcff"] * 1.025)
+    assert v["terminal"]["fcfe"] == pytest.approx(last["fcfe"] * 1.025)
+
+
+def test_faster_growth_does_not_leak_into_terminal_working_capital():
+    v = V.value(replace(BASE, growth=0.30))
+    last, term = v["projection"].iloc[-1], v["terminal"]
+    rev6 = last["revenue"] * 1.025
+    ebit6 = rev6 * 0.30 - rev6 * 0.05
+    expected = ebit6 * 0.8 + rev6 * 0.05 - rev6 * 0.05 - (rev6 - last["revenue"]) * 0.10
+    assert term["fcff"] == pytest.approx(expected)
+
+
+def test_implied_growth_round_trip():
+    v = V.value(BASE)
+    a2 = replace(BASE, tg=v["implied_tg"])
+    assert V.value(a2)["unlevered"]["perpetuity"]["ev"] == pytest.approx(v["unlevered"]["exit"]["ev"], rel=1e-6)
+
+
+def test_scenarios_are_ordered_and_weighted():
+    sc = V.scenario_inputs(BASE)
+    vals = {k: V.value(x)["average"] for k, x in sc.items()}
+    assert vals["Bear"] < vals["Base"] < vals["Bull"]
+    w = V.weighted(vals, {"Bear": 1, "Base": 2, "Bull": 1})
+    assert w == pytest.approx((vals["Bear"] + 2 * vals["Base"] + vals["Bull"]) / 4)
+
+
+def test_adjusted_beta_pulls_toward_one():
+    assert V.adjusted_beta(2.0) == pytest.approx(1.67)
+    assert V.adjusted_beta(1.0) == pytest.approx(1.0)
+    assert V.adjusted_beta(None) == 1.0

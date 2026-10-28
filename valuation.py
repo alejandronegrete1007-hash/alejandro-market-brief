@@ -41,7 +41,16 @@ def wacc(ke: float, kd: float, tax: float, equity: float, debt: float) -> float:
     return equity / total * ke + debt / total * kd * (1 - tax)
 
 
+def adjusted_beta(raw: float | None) -> float:
+    """Blume adjustment (what Bloomberg shows as 'adjusted beta'): betas drift toward 1 over time,
+    so 2/3 of the measured beta plus 1/3 of the market's."""
+    if raw is None:
+        return 1.0
+    return 0.67 * float(raw) + 0.33
+
+
 def capm(rf: float, beta: float | None, erp: float = 0.05) -> float:
+    """Cost of equity = risk-free rate + beta x equity risk premium."""
     b = 1.0 if beta is None else float(np.clip(beta, 0.5, 2.5))
     return rf + b * erp
 
@@ -69,6 +78,19 @@ def project(a: Inputs) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("year")
 
 
+def terminal_year(a: Inputs, last: pd.Series, tg: float | None = None) -> dict:
+    """Year 6, normalized: everything grows at the perpetual rate, so working capital and new
+    borrowing reflect steady-state growth instead of the faster growth of years 1-5."""
+    tg = a.tg if tg is None else tg
+    rev = last["revenue"] * (1 + tg)
+    ebitda = rev * a.margin_target
+    da = rev * a.da_pct
+    ebit = ebitda - da
+    fcff = ebit - max(ebit, 0) * a.tax + da - rev * a.capex_pct - (rev - last["revenue"]) * a.nwc_pct
+    fcfe = fcff - last["debt"] * a.kd * (1 - a.tax) + last["debt"] * tg
+    return {"revenue": rev, "ebitda": ebitda, "fcff": fcff, "fcfe": fcfe}
+
+
 def value(a: Inputs) -> dict:
     """All four valuations plus the cross-checks bankers look at."""
     if a.wacc <= a.tg or a.ke <= a.tg:
@@ -81,15 +103,16 @@ def value(a: Inputs) -> dict:
     dw, de = (1 + a.wacc) ** -t, (1 + a.ke) ** -t
     last = df.iloc[-1]
 
+    term = terminal_year(a, last)
     pv_fcff = float((df["fcff"].values * dw).sum())
-    tv_u_perp = last["fcff"] * (1 + a.tg) / (a.wacc - a.tg)
+    tv_u_perp = term["fcff"] / (a.wacc - a.tg)
     tv_u_exit = last["ebitda"] * a.exit_mult
     ev_perp = pv_fcff + tv_u_perp * dw[-1]
     ev_exit = pv_fcff + tv_u_exit * dw[-1]
     net_debt = a.debt0 - a.cash0
 
     pv_fcfe = float((df["fcfe"].values * de).sum())
-    tv_l_perp = last["fcfe"] * (1 + a.tg) / (a.ke - a.tg)
+    tv_l_perp = term["fcfe"] / (a.ke - a.tg)
     tv_l_exit = last["ebitda"] * a.exit_mult - last["debt"]   # equity at exit
     eq_l_perp = pv_fcfe + tv_l_perp * de[-1] + a.cash0
     eq_l_exit = pv_fcfe + tv_l_exit * de[-1] + a.cash0
@@ -111,15 +134,55 @@ def value(a: Inputs) -> dict:
         },
         # Cross-checks: the multiple the perpetuity method implies, and the growth the exit multiple implies.
         "implied_exit_mult": tv_u_perp / last["ebitda"] if last["ebitda"] > 0 else None,
-        "implied_tg": ((tv_u_exit * a.wacc - last["fcff"]) / (tv_u_exit + last["fcff"])
-                       if (tv_u_exit + last["fcff"]) else None),
-        "pv_fcff": pv_fcff, "pv_fcfe": pv_fcfe,
+        "implied_tg": _implied_tg(a, last, tv_u_exit),
+        "pv_fcff": pv_fcff, "pv_fcfe": pv_fcfe, "terminal": term,
     }
     vals = [out["unlevered"]["perpetuity"]["per_share"], out["unlevered"]["exit"]["per_share"],
             out["levered"]["perpetuity"]["per_share"], out["levered"]["exit"]["per_share"]]
     out["average"] = float(np.mean(vals))
     out["low"], out["high"] = float(min(vals)), float(max(vals))
     return out
+
+
+def _implied_tg(a: Inputs, last: pd.Series, tv: float) -> float | None:
+    """Perpetual growth that makes the perpetuity terminal value equal the exit-multiple one."""
+    def f(g):
+        return terminal_year(a, last, g)["fcff"] / (a.wacc - g) - tv
+    lo, hi = -0.05, a.wacc - 1e-4
+    try:
+        flo, fhi = f(lo), f(hi)
+    except ZeroDivisionError:
+        return None
+    if flo > 0 or fhi < 0:
+        return None
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if f(mid) > 0:
+            hi = mid
+        else:
+            lo = mid
+    return (lo + hi) / 2
+
+
+SCENARIOS = ("Bear", "Base", "Bull")
+
+
+def scenario_inputs(a: Inputs, growth_step: float = 0.05, margin_step: float = 0.15,
+                    mult_step: float = 0.20, rate_step: float = 0.01) -> dict[str, Inputs]:
+    """Bear and bull around the base case: growth ± 5 pts, year-5 margin ± 15% of itself,
+    exit multiple ± 20% and discount rates ± 1 pt (higher rates in the bear case)."""
+    def shift(k):
+        return replace(a, growth=a.growth + k * growth_step,
+                       margin_target=a.margin_target * (1 + k * margin_step),
+                       exit_mult=max(a.exit_mult * (1 + k * mult_step), 1.0),
+                       wacc=a.wacc - k * rate_step, ke=a.ke - k * rate_step)
+    return {"Bear": shift(-1), "Base": a, "Bull": shift(1)}
+
+
+def weighted(values: dict[str, float], probs: dict[str, float]) -> float:
+    """Probability-weighted value; probabilities are normalized to sum to one."""
+    total = sum(probs.values())
+    return sum(values[k] * probs[k] for k in values) / total if total else float("nan")
 
 
 def implied_growth(a: Inputs, price: float, lo: float = -0.3, hi: float = 1.0) -> float | None:
