@@ -141,11 +141,17 @@ Return JSON exactly like:
       "what": "what happened, 1-2 sentences",
       "why": "why it matters for investors, 1-2 sentences",
       "watch": "what to watch next, 1 sentence",
+      "markets": ["2-4 markets or asset classes it moves, e.g. 'US tech stocks', 'Mexican peso', 'Oil', 'US Treasuries'"],
+      "impact": [{{"ticker": "US-listed ticker", "direction": "up" | "down" | "mixed", "why": "max 8 words"}}],
       "sources": [headline numbers that support this story]}}
   ]
 }}
 Pick 6 stories, ranked by market importance, at least 2 about Mexico if the headlines allow.
-Merge headlines about the same event into one story and cite all of them."""
+Merge headlines about the same event into one story and cite all of them.
+For "impact" list 1-4 tickers that trade in New York and are directly exposed: the companies named in the
+headlines first, then the clearest sector or country ETF (e.g. SMH chips, XLE energy, KRE regional banks, EWW Mexico,
+TLT long Treasuries, GLD gold, USO oil). For Mexico use NYSE-listed Mexican ADRs (AMX, FMX, KOF, CX, ASR, PAC, OMAB, TV)
+or EWW. "direction" is the likely first reaction implied by the news, not a forecast; use "mixed" when unclear."""
     out = _generate(prompt)
     n = len(headlines)
     stories = []
@@ -182,8 +188,15 @@ Return JSON exactly like:
   "risks": ["3 short risks"],
   "catalysts": ["up to 3 upcoming events; only ones supported by the inputs, e.g. the earnings date"],
   "unknowns": ["1-2 things the data can't tell us"],
-  "bottom_line": "one sentence, not a buy/sell recommendation"
-}}"""
+  "lean": "Buy" | "Hold" | "Sell",
+  "conviction": "Low" | "Medium" | "High",
+  "lean_why": "2-3 sentences: why that lean, weighing the DCF, momentum, risk and the analyst consensus given",
+  "changes_mind": "one sentence: what would flip the lean",
+  "vs_consensus": "one sentence comparing your lean with the analyst consensus given (agree/disagree and why)",
+  "bottom_line": "one sentence"
+}}
+The "lean" is a model opinion for an investor's own research, built only from the inputs. If the data is too thin
+or contradictory, choose "Hold" with "Low" conviction and say why."""
     return _generate(prompt, temperature=0.35)
 
 

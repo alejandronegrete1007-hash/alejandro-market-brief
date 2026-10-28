@@ -10,7 +10,7 @@ import mexico
 import sources as src
 import state
 import theme as T
-from views.common import analyze_picker, mini_rows
+from views.common import click, mini_rows
 
 US_SET = [("S&P 500", "SPY"), ("Nasdaq 100", "QQQ"), ("Dow Jones", "DIA"), ("Russell 2000", "IWM"),
           ("Gold", "GLD"), ("Oil · WTI", "USO")]
@@ -25,22 +25,23 @@ def _safe(fn, *a):
 
 def _etf_tile(label, sym, q, is_open):
     if not q:
-        return T.tile(label, "—", T.chip(sym, "US"), "unavailable", accent="us")
-    return T.tile(
-        label, T.money(q["price"]), T.pill(q["pct"]),
-        f"{sym} · {T.clock(q['time'])}", T.freshness(q["time"], is_open),
-        T.range_bar(q["low"], q["high"], q["price"], "L", "H"), accent="us")
+        return T.tile(label, "—", tick=sym, foot_l="unavailable")
+    return T.tile(label, T.money(q["price"]), T.pill(q["pct"]), tick=f"via {sym}",
+                  foot_l=T.status(q["time"], is_open),
+                  extra=T.range_bar(q["low"], q["high"], q["price"], "Today's low → high"), go=f"t:{sym}")
 
 
 def _hero(status):
     now_et, now_mx = dt.datetime.now(src.ET), dt.datetime.now(src.MX)
-    us = '<span class="amb-dot on"></span>NYSE open' if status["open"] else '<span class="amb-dot off"></span>NYSE closed · latest close'
-    bmv = '<span class="amb-dot on"></span>BMV open' if src.bmv_open() else '<span class="amb-dot off"></span>BMV closed'
+    us = ('<span><span class="amb-dot on"></span>NYSE open</span>' if status["open"]
+          else '<span><span class="amb-dot off"></span>NYSE closed · prices are the last close</span>')
+    bmv = ('<span><span class="amb-dot on"></span>BMV open</span>' if src.bmv_open()
+           else '<span><span class="amb-dot off"></span>BMV closed</span>')
     T.show(f"""
     <div class="amb-hero">
-      <div><div class="amb-kicker">Daily brief · Wall Street &amp; México</div>
+      <div><div class="amb-eyebrow">Daily brief · Wall Street &amp; México</div>
         <h1>{now_mx:%A, %B} {now_mx.day}</h1>
-        <div class="sub"><span>{us}</span><span>{bmv}</span></div></div>
+        <div class="sub">{us}{bmv}</div></div>
       <div class="amb-clocks">
         <div class="amb-clock"><div class="c-l">New York</div><div class="c-v">{now_et:%H:%M}</div></div>
         <div class="amb-clock"><div class="c-l">CDMX</div><div class="c-v">{now_mx:%H:%M}</div></div>
@@ -62,108 +63,100 @@ def render():
     fix = _safe(mexico.fix_history, 400)
     S = mexico.SERIES
 
-    # ticker tape
     items = [(lbl, T.money(q["price"]), q["pct"]) for (lbl, s), q in ((x, quotes[x[1]]) for x in US_SET) if q]
     if btc:
-        items.append(("Bitcoin", T.money(btc["price"]), btc["pct"]))
+        items.append(("Bitcoin", T.money(btc["price"], 0), btc["pct"]))
     if fix is not None and len(fix) > 1:
         items.append(("USD/MXN", f"{fix.iloc[-1]:.4f}", (fix.iloc[-1] / fix.iloc[-2] - 1) * 100))
     if eww:
         items.append(("México · EWW", T.money(eww["price"]), eww["pct"]))
-    if t10 is not None:
-        items.append(("US 10Y", f"{t10.iloc[-1]:.2f}%", None))
-    if S["target"] in bx:
-        items.append(("Banxico rate", f"{bx[S['target']]['value']:.2f}%", None))
     if items:
         T.show(T.tape(items))
 
     main, rail = st.columns([2.9, 1], gap="large")
     with main:
         # ---------------- Wall Street
-        T.section("Wall Street", "ETF proxies for the indices", T.chip("US", "US"))
-        tiles = [_etf_tile(l, s, quotes[s], is_open) for l, s in US_SET[:4]]
-        T.show(T.grid(tiles))
-        tiles = [_etf_tile(l, s, quotes[s], is_open) for l, s in US_SET[4:]]
+        T.section("Wall Street", "index ETFs · click any card to analyze it", "United States")
+        tiles = [_etf_tile(l, s, quotes[s], is_open) for l, s in US_SET]
         if btc:
-            tiles.append(T.tile("Bitcoin", T.money(btc["price"], 0), T.pill(btc["pct"], suffix=" 24h"),
-                                f"CoinGecko · {T.clock(btc['time'])}", T.chip("24/7", "live"), accent="us"))
+            tiles.append(T.tile("Bitcoin", T.money(btc["price"], 0), T.pill(btc["pct"], suffix=" 24h"), tick="BTC",
+                                foot_l=f"24/7 market · {T.clock(btc['time'])}"))
         if t10 is not None and len(t10) > 1:
             bps = (t10.iloc[-1] - t10.iloc[-2]) * 100
             tiles.append(T.tile("US 10-year yield", f"{t10.iloc[-1]:.2f}%",
-                                f'<span class="amb-pill {T.tone(bps)}">{bps:+.0f} bps</span>',
-                                f"FRED · {t10.index[-1]:%b %d}", T.chip("daily", "daily"),
-                                f'<div class="spark">{T.spark(t10.iloc[-120:], color=T.C["gold"])}</div>', accent="us"))
-        T.show(T.grid(tiles))
+                                f'<span class="amb-pill {T.tone(bps)}">{bps:+.0f} bps</span>', tick="UST",
+                                foot_l=f"Daily · {t10.index[-1]:%b %d}",
+                                extra=f'<div class="spark">{T.spark(t10.iloc[-120:], color=T.C["gold"])}</div>'))
+        click(T.grid(tiles), "tiles_us")
+        T.show('<div class="amb-note">The S&amp;P 500, Nasdaq, Dow and Russell are followed through the ETFs that track them '
+               '(SPY, QQQ, DIA, IWM), whose daily % move is almost identical. The bar shows where the price sits between '
+               "today's low and high. <b>Close</b> means the market is shut and you see the last trade of the day.</div>")
 
         # ---------------- Mexico
-        T.section("México", "Banxico SIE · NYSE-listed ADRs", T.chip("MX", "MX"))
+        T.section("México", "Banxico · NYSE-listed Mexican stocks", "Mexico")
         tiles = []
         if fix is not None and len(fix) > 1:
             chg = (fix.iloc[-1] / fix.iloc[-2] - 1) * 100
-            ytd_base = fix[fix.index < dt.datetime(fix.index[-1].year, 1, 1)]
-            ytd = (fix.iloc[-1] / ytd_base.iloc[-1] - 1) * 100 if len(ytd_base) else None
-            tiles.append(T.tile("Dollar in pesos (FIX)", f"{fix.iloc[-1]:.4f}", T.pill(chg),
-                                f"Banxico · {fix.index[-1]:%b %d}" + (f" · YTD {T.pct(ytd, 1, frac=False)}" if ytd is not None else ""),
-                                T.chip("daily", "daily"),
-                                f'<div class="spark">{T.spark(fix.iloc[-90:], color=T.C["mx"])}</div>', accent="mx"))
+            base = fix[fix.index < dt.datetime(fix.index[-1].year, 1, 1)]
+            ytd = (fix.iloc[-1] / base.iloc[-1] - 1) * 100 if len(base) else None
+            tiles.append(T.tile("Dollar in pesos", f"{fix.iloc[-1]:.4f}", T.pill(chg), tick="FIX",
+                                foot_l=f"Banxico · {fix.index[-1]:%b %d}" + (f" · YTD {T.pct(ytd, 1, frac=False)}" if ytd is not None else ""),
+                                extra=f'<div class="spark">{T.spark(fix.iloc[-90:], color=T.C["mx"])}</div>',
+                                go="p:mexico", hint="Charts →"))
         if eww:
-            tiles.append(T.tile("Mexican stocks (EWW)", T.money(eww["price"]), T.pill(eww["pct"]),
-                                f"MSCI Mexico · {T.clock(eww['time'])}", T.freshness(eww["time"], is_open),
-                                T.range_bar(eww["low"], eww["high"], eww["price"], "L", "H"), accent="mx"))
+            tiles.append(T.tile("Mexican stocks", T.money(eww["price"]), T.pill(eww["pct"]), tick="via EWW",
+                                foot_l=T.status(eww["time"], is_open),
+                                extra=T.range_bar(eww["low"], eww["high"], eww["price"], "Today's low → high"), go="t:EWW"))
         if S["target"] in bx:
             b = bx[S["target"]]
-            carry = ""
-            if fed is not None:
-                carry = f'<div class="amb-note" style="margin-top:4px">Spread vs Fed (upper): <b style="color:var(--text)">{b["value"] - fed.iloc[-1]:+.2f} pts</b></div>'
-            tiles.append(T.tile("Banxico target rate", f"{b['value']:.2f}%", "", f"Banxico · {b['date']:%b %d}",
-                                T.chip("official", "daily"), carry, accent="mx"))
-        if S["cetes28"] in bx:
-            b = bx[S["cetes28"]]
-            tiles.append(T.tile("CETES 28 days", f"{b['value']:.2f}%", "", f"Auction · {b['date']:%b %d}",
-                                T.chip("weekly", "daily"), accent="mx"))
+            carry = (f'<div class="amb-note" style="margin-top:6px">vs Fed: <b style="color:var(--text)">{b["value"] - fed.iloc[-1]:+.2f} pts</b></div>'
+                     if fed is not None else "")
+            tiles.append(T.tile("Banxico rate", f"{b['value']:.2f}%", tick="TARGET", foot_l=f"Official · {b['date']:%b %d}",
+                                extra=carry, go="p:mexico", hint="Charts →"))
         if S["inflation"] in bx:
             b = bx[S["inflation"]]
             inside = abs(b["value"] - mexico.INFLATION_TARGET) <= 1
-            flag = T.chip("in band" if inside else "above band" if b["value"] > 4 else "below band",
-                          "live" if inside else "delayed")
-            tiles.append(T.tile("Inflation, annual", f"{b['value']:.2f}%", flag,
-                                f"INPC · {b['date']:%b %Y}", T.chip("monthly", "daily"),
-                                T.range_bar(1.5, 6.0, b["value"], "", "", fmt=lambda v: f"{v:.1f}%"), accent="mx"))
+            tiles.append(T.tile("Inflation", f"{b['value']:.2f}%",
+                                f'<span class="amb-pill {"up" if inside else "down"}">{"inside 2–4% target" if inside else "outside target"}</span>',
+                                tick="INPC", foot_l=f"Annual · {b['date']:%b %Y}", go="p:mexico", hint="Charts →"))
+        if S["cetes28"] in bx:
+            b = bx[S["cetes28"]]
+            tiles.append(T.tile("CETES 28 days", f"{b['value']:.2f}%", tick="AUCTION", foot_l=f"Weekly · {b['date']:%b %d}",
+                                go="p:mexico", hint="Charts →"))
         if S["tiie28"] in bx:
             b = bx[S["tiie28"]]
-            tiles.append(T.tile("TIIE 28 days", f"{b['value']:.2f}%", "", f"Banxico · {b['date']:%b %d}",
-                                T.chip("daily", "daily"), accent="mx"))
+            tiles.append(T.tile("TIIE 28 days", f"{b['value']:.2f}%", tick="TIIE", foot_l=f"Daily · {b['date']:%b %d}",
+                                go="p:mexico", hint="Charts →"))
         if S["target"] in bx and S["inflation"] in bx:
             real = bx[S["target"]]["value"] - bx[S["inflation"]]["value"]
-            tiles.append(T.tile("Real policy rate", f"{real:.2f}%", "",
-                                "Banxico rate − inflation", T.chip("calc", "daily"),
-                                '<div class="amb-note" style="margin-top:4px">Above ~2% is a tight stance</div>', accent="mx"))
+            tiles.append(T.tile("Real policy rate", f"{real:.2f}%", tick="CALC", foot_l="Banxico rate − inflation",
+                                extra='<div class="amb-note" style="margin-top:6px">Above ~2% = tight money</div>'))
         lead = _safe(mexico.leaderboard)
         if lead and lead[0]["ytd"] is not None:
             r = lead[0]
-            tiles.append(T.tile("Top Mexican ADR, YTD", T.esc(r["symbol"]), T.pill(r["ytd"] * 100),
-                                T.esc(r["name"][:22]), T.chip("ytd", "daily"), accent="mx"))
+            tiles.append(T.tile("Top Mexican stock YTD", T.esc(r["symbol"]), T.pill(r["ytd"] * 100), tick="ADR",
+                                foot_l=T.esc(r["name"][:24]), go=f"t:{r['symbol']}"))
         if tiles:
-            T.show(T.grid(tiles))
+            click(T.grid(tiles), "tiles_mx")
         else:
             T.show('<div class="amb-empty">Mexico data unavailable. Check BANXICO_TOKEN in Secrets.</div>')
-
         brief_slot = st.container()
 
     with rail:
-        T.section("Your watchlist")
-        T.show(f'<div class="amb-note" style="margin:-6px 0 8px">{T.chip("US", "US")} S&amp;P 500 picks</div>')
-        T.show(mini_rows(st.session_state.wl_us))
-        mx_syms, live = state.mx_list()
-        T.show(f'<div class="amb-note" style="margin:16px 0 8px">{T.chip("MX", "MX")} '
-               f'{"Top 5 Mexican ADRs, YTD" if live else "Mexican picks"}</div>')
-        T.show(mini_rows(mx_syms))
-        st.write("")
-        analyze_picker(st.session_state.wl_us + mx_syms, "pick_home", "Analyze a stock")
+        T.section("Watchlist", "", "Click to analyze")
+        T.show(f'<div class="amb-th" style="margin:2px 0 8px">S&amp;P 500 leaders 2026 {T.chip("US", "US")}</div>')
+        click(mini_rows(state.US_LEADERS), "rail_us")
+        mx_syms, live = state.mx_leaders()
+        T.show(f'<div class="amb-th" style="margin:16px 0 8px">{"Mexico top 5 YTD" if live else "Mexico picks"} {T.chip("MX", "MX")}</div>')
+        click(mini_rows(mx_syms), "rail_mx")
+        mine = state.my_list()
+        if mine:
+            T.show('<div class="amb-th" style="margin:16px 0 8px">My stocks</div>')
+            click(mini_rows(mine[:8]), "rail_my")
 
     with brief_slot:
-        _brief(quotes, eww, btc, t10, bx, fix, status)
-    T.footer("Not investment advice · data from Finnhub, Twelve Data, FRED, Banxico, SEC, CoinGecko")
+        _brief(quotes, eww, btc, t10, bx, fix)
+    T.footer("Not investment advice · Finnhub, Twelve Data, FRED, Banxico, SEC, CoinGecko")
 
 
 def _snapshot(quotes, eww, btc, t10, bx, fix) -> str:
@@ -177,12 +170,11 @@ def _snapshot(quotes, eww, btc, t10, bx, fix) -> str:
     if t10 is not None and len(t10) > 1:
         lines.append(f"US 10-year Treasury yield: {t10.iloc[-1]:.2f}% ({(t10.iloc[-1] - t10.iloc[-2]) * 100:+.0f} bps)")
     if fix is not None and len(fix) > 1:
-        lines.append(f"USD/MXN FIX: {fix.iloc[-1]:.4f} ({(fix.iloc[-1] / fix.iloc[-2] - 1) * 100:+.2f}%; a higher number means a weaker peso)")
+        lines.append(f"USD/MXN FIX: {fix.iloc[-1]:.4f} ({(fix.iloc[-1] / fix.iloc[-2] - 1) * 100:+.2f}%; higher = weaker peso)")
     if eww:
         lines.append(f"Mexican stocks via EWW ETF: {eww['price']:.2f} ({eww['pct']:+.2f}%)")
-    labels = {"target": "Banxico target rate", "cetes28": "CETES 28-day yield", "tiie28": "TIIE 28",
-              "inflation": "Mexico annual inflation"}
-    for k, lbl in labels.items():
+    for k, lbl in {"target": "Banxico target rate", "cetes28": "CETES 28-day yield", "tiie28": "TIIE 28",
+                   "inflation": "Mexico annual inflation"}.items():
         b = bx.get(mexico.SERIES[k])
         if b:
             lines.append(f"{lbl}: {b['value']:.2f}% (as of {b['date']})")
@@ -194,52 +186,77 @@ def _fmt_headline(h: dict) -> str:
     return f"{h['market']} | {h['source']} | {when} | {h['title']} — {h['summary'][:220]}"
 
 
-def _brief(quotes, eww, btc, t10, bx, fix, status):
+ARROW = {"up": "▲", "down": "▼", "mixed": "◆"}
+
+
+def _impact_html(s: dict, known: frozenset) -> str:
+    markets = [m for m in (s.get("markets") or []) if isinstance(m, str)][:4]
+    chips, seen = [], set()
+    for imp in (s.get("impact") or [])[:5]:
+        if not isinstance(imp, dict):
+            continue
+        tk = str(imp.get("ticker", "")).upper().strip().replace("$", "")
+        if not tk or tk in seen or (known and tk not in known):
+            continue  # drop tickers that don't exist
+        seen.add(tk)
+        d = imp.get("direction") if imp.get("direction") in ARROW else "mixed"
+        chips.append(f'<span class="amb-tk"{T.go_attr("t:" + tk)} title="Open {T.esc(tk)} analysis">'
+                     f'<span class="ar {d}">{ARROW[d]}</span>{T.esc(tk)}'
+                     f'<span class="why">{T.esc(str(imp.get("why", ""))[:60])}</span></span>')
+    if not markets and not chips:
+        return ""
+    mk = "".join(T.chip(m, "plain") for m in markets)
+    return (f'<div class="amb-impact"><div class="row" style="margin:0"><b>Moves</b></div>'
+            f'<div class="mk">{mk}</div>{"<div class=mk>" + "".join(chips) + "</div>" if chips else ""}</div>')
+
+
+def _brief(quotes, eww, btc, t10, bx, fix):
     us_news, us_failed = src.recent_headlines("US")
     mx_news, mx_failed = src.recent_headlines("MX")
     pool = us_news[:26] + mx_news[:16]
 
-    T.section("The brief", f"{len(pool)} headlines · AI summary refreshes every 6 h")
+    T.section("The brief", f"{len(pool)} headlines · refreshed every 6 h", "Written by AI from today's news")
     if not pool:
         T.show('<div class="amb-empty">No headlines came in from the news feeds right now.</div>')
     else:
-        waiting = st.empty()  # top headlines stay visible while the AI writes
+        waiting = st.empty()
         with waiting.container():
-            T.show('<div class="amb-note" style="margin:-4px 0 6px">Top headlines while the AI writes the brief '
-                   '(about 10-30 seconds the first time every 6 hours)…</div>')
+            T.show('<div class="amb-note" style="margin:-4px 0 6px">Top headlines while the brief is written '
+                   '(10–30 seconds the first time every 6 hours)…</div>')
             T.show(T.news_list(us_news[:4] + mx_news[:4], 8))
         try:
             with st.spinner("Writing today's brief..."):
-                now = dt.datetime.now(src.MX)
                 b = ai.daily_brief(_snapshot(quotes, eww, btc, t10, bx, fix),
-                                   tuple(_fmt_headline(h) for h in pool), ai.stamp_6h(now))
+                                   tuple(_fmt_headline(h) for h in pool), ai.stamp_6h(dt.datetime.now(src.MX)))
             waiting.empty()
-            lead = T.esc(b.get("headline", ""))
-            T.show(f'<div class="amb-lead"><span>›</span> {lead}</div>'
-                   f'<div class="amb-brief">'
+            T.show(f'<div class="amb-lead"><span>›</span> {T.esc(b.get("headline", ""))}</div>'
+                   f'<div class="amb-grid g2 stack">'
                    f'<div class="amb-take"><div class="h">{T.chip("US", "US")} Wall Street</div><p>{T.esc(b.get("us", ""))}</p></div>'
                    f'<div class="amb-take"><div class="h">{T.chip("MX", "MX")} México</div><p>{T.esc(b.get("mexico", ""))}</p></div>'
                    f'</div>')
+            known = src.known_tickers()
             cards = []
             for i, s in enumerate(b.get("stories", []), start=1):
                 srcs = "".join(
                     f'<a class="amb-src" href="{T.esc(pool[j]["url"])}" target="_blank" rel="noopener">'
-                    f'{T.esc(pool[j]["source"])}{(" · " + pool[j]["time"].strftime("%b %d %H:%M")) if pool[j].get("time") else ""}</a>'
+                    f'{T.esc(pool[j]["source"])}{(" · " + pool[j]["time"].strftime("%b %d %H:%M")) if pool[j].get("time") else ""} ↗</a>'
                     for j in s["sources"][:4])
-                mk = s.get("market", "GLOBAL") if s.get("market") in ("US", "MX", "GLOBAL") else "GLOBAL"
+                mk = s.get("market") if s.get("market") in ("US", "MX", "GLOBAL") else "GLOBAL"
                 cards.append(
                     f'<div class="amb-story"><div class="top">{T.chip(mk, mk)}<span class="rank">{i:02d}</span></div>'
                     f'<h3>{T.esc(s["title"])}</h3>'
                     f'<div class="row"><b>What happened</b>{T.esc(s.get("what", ""))}</div>'
                     f'<div class="row"><b>Why it matters</b>{T.esc(s.get("why", ""))}</div>'
+                    f'{_impact_html(s, known)}'
                     f'<div class="row"><b>Watch next</b>{T.esc(s.get("watch", ""))}</div>'
                     f'<div class="amb-srcs">{srcs}</div></div>')
             st.write("")
-            T.show(T.grid(cards, "g3"))
-            T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>Written by Gemini from the headlines and '
-                   'numbers above only. Every story links to the articles it is based on.</div>')
+            click(T.grid(cards, "g3 stack"), "stories")
+            T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>Written by Gemini only from the headlines and numbers '
+                   'on this page; every story links to its articles. ▲ ▼ ◆ show the likely first reaction for each ticker '
+                   '(up, down, mixed), not a forecast. Click a ticker to analyze it.</div>')
         except Exception as e:
-            st.info(f"The AI brief isn't available right now ({e}). Latest headlines below.")
+            st.info(f"The AI brief isn't available right now ({e}). The latest headlines are below.")
 
     with st.expander("All headlines", expanded=False):
         t1, t2 = st.tabs(["Wall Street", "México"])

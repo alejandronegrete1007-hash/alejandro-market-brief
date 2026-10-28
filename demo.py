@@ -77,6 +77,11 @@ def _sec_facts(sym: str) -> dict:
                 "NetIncomeLoss": {"units": {"USD": rows([r * 0.12 for r in rev])}},
                 "NetCashProvidedByUsedInOperatingActivities": {"units": {"USD": rows(ocf)}},
                 "PaymentsToAcquirePropertyPlantAndEquipment": {"units": {"USD": rows(capex)}},
+                "OperatingIncomeLoss": {"units": {"USD": rows([r * (0.22 if sym != "MRNA" else -0.35) for r in rev])}},
+                "DepreciationDepletionAndAmortization": {"units": {"USD": rows([r * 0.06 for r in rev])}},
+                "IncomeTaxExpenseBenefit": {"units": {"USD": rows([r * 0.04 for r in rev])}},
+                "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {"units": {"USD": rows([r * 0.2 for r in rev])}},
+                "InterestExpense": {"units": {"USD": rows([base * 0.5 * 0.05] * len(rev))}},
                 "CashAndCashEquivalentsAtCarryingValue": {"units": {"USD": inst(base * 0.3)}},
                 "LongTermDebt": {"units": {"USD": inst(base * 0.5)}},
             },
@@ -101,6 +106,8 @@ def _bx_rows(sid: str, start: str, end: str) -> list[dict]:
         v = v - v[-1] + 3.76
     return [{"fecha": d.strftime("%d/%m/%Y"), "dato": f"{x:.4f}"} for d, x in zip(idx, v)]
 
+
+DEMO_TICKERS = ["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "AMX", "FMX", "KOF", "CX", "ASR", "PAC", "OMAB", "TV"]
 
 BX_TITLES = {"SF43718": "Tipo de cambio Pesos por dólar E.U.A. Para solventar obligaciones (FIX)",
              "SF61745": "Tasa objetivo", "SF43783": "TIIE a 28 días", "SF43936": "Cetes a 28 días",
@@ -128,7 +135,11 @@ def fake_json(url: str, p: dict):
             return {"metric": {"peTTM": 24.3, "forwardPE": 17.8, "psTTM": 5.2, "pbQuarterly": 4.1, "evEbitdaTTM": 13.4,
                                "currentEv/freeCashFlowTTM": 31.0, "netProfitMarginTTM": 18.2, "roeTTM": 22.5,
                                "revenueGrowthTTMYoy": 34.1, "52WeekHigh": LEVEL.get(sym, 100) * 1.08,
-                               "52WeekLow": LEVEL.get(sym, 100) * 0.4, "beta": 1.3}}
+                               "52WeekLow": LEVEL.get(sym, 100) * 0.4, "beta": 1.3,
+                               "yearToDatePriceReturnDaily": YTD.get(sym, 0.1) * 100, "52WeekPriceReturnDaily": YTD.get(sym, 0.1) * 120}}
+        if "/stock/recommendation" in url:
+            return [{"period": f"2026-{m:02d}-01", "strongBuy": 8 + m % 3, "buy": 14, "hold": 9 - m % 2, "sell": 1, "strongSell": 0,
+                     "symbol": sym} for m in range(10, 4, -1)]
         if "/search" in url:
             q = (p.get("q") or "").upper()
             return {"result": [{"symbol": q[:4] or "NVDA", "description": f"{q} CORP", "type": "Common Stock"},
@@ -178,10 +189,10 @@ def fake_json(url: str, p: dict):
         return {"bmx": {"series": series}}
     if "company_tickers" in url:
         return {str(i): {"cik_str": 1000 + i, "ticker": t, "title": t} for i, t in
-                enumerate(["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "SPY"])}
+                enumerate(DEMO_TICKERS)}
     if "companyfacts" in url:
         cik = int(re.search(r"CIK(\d+)", url).group(1)) - 1000
-        return _sec_facts(["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "SPY"][cik])
+        return _sec_facts(DEMO_TICKERS[cik])
     if "generativelanguage" in url:
         return {"models": [{"name": "models/gemini-3.0-flash", "supportedGenerationMethods": ["generateContent"]},
                            {"name": "models/gemini-3.0-flash-lite", "supportedGenerationMethods": ["generateContent"]}]}
@@ -215,12 +226,18 @@ def fake_ai(prompt: str) -> dict:
             "stories": [
                 {"market": "US", "title": "Chipmakers drive the market higher", "what": "Semiconductor shares led gains.",
                  "why": "Chips are now the market's main engine, so their earnings set the tone.", "watch": "Big Tech results this week.",
+                 "markets": ["US tech stocks", "Semiconductors"],
+                 "impact": [{"ticker": "MU", "direction": "up", "why": "memory prices keep rising"},
+                            {"ticker": "SMH", "direction": "up", "why": "chip ETF"}, {"ticker": "FAKEX", "direction": "up", "why": "x"}],
                  "sources": [0, 3]},
                 {"market": "US", "title": "The Fed is expected to hold", "what": "Markets price no change on Wednesday.",
                  "why": "A hawkish tone would hit stocks already near records.", "watch": "The statement and the press conference.",
                  "sources": [1, 4]},
                 {"market": "MX", "title": "Peso firm before the Fed", "what": "The peso closed with a small gain.",
                  "why": "A strong peso lowers imported inflation and gives Banxico room to cut.", "watch": "Banxico's next decision.",
+                 "markets": ["Mexican peso", "Mexican stocks"],
+                 "impact": [{"ticker": "EWW", "direction": "up", "why": "stronger peso lifts dollar returns"},
+                            {"ticker": "FMX", "direction": "mixed", "why": "peso exposure"}],
                  "sources": [5, 6]},
                 {"market": "MX", "title": "Mexican inflation cools", "what": "Mid-October inflation eased.",
                  "why": "It keeps rate cuts on the table.", "watch": "Full-month CPI.", "sources": [9]},
@@ -237,6 +254,10 @@ def fake_ai(prompt: str) -> dict:
             "bear": "The cycle turns and prices fall, which hits earnings fast.",
             "risks": ["Cyclical pricing", "High expectations", "Customer concentration"],
             "catalysts": ["Next earnings report"], "unknowns": ["Next year's pricing", "Competitors' capacity plans"],
+            "lean": "Hold", "conviction": "Medium",
+            "lean_why": "Demo: momentum and analyst support are strong, but the DCF says the price already assumes fast growth.",
+            "changes_mind": "A guidance raise that keeps margins near the peak.",
+            "vs_consensus": "Less bullish than the Buy consensus because valuation looks full.",
             "bottom_line": "A strong story already well reflected in the price; the next report matters."}
 
 

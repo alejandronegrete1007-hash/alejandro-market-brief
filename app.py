@@ -24,8 +24,4 @@ PAGES.update({
 })
 nav = st.navigation(list(PAGES.values()), position="top")
 state.init()
-
-if st.session_state.pop("_goto", None):
-    st.switch_page(PAGES["analysis"])
-
 nav.run()

@@ -57,13 +57,25 @@ formula for every ADR, with prices in dollars, so it reflects both the stock and
 **Statistical ranges.** price × e^(±z·σ·√(days/252)) with z = 1 (≈68%) and 1.96 (≈95%), zero drift. They describe how
 far the stock usually moves, not where it is going.
 
-**DCF.** Free cash flow = operating cash flow − capital expenditures, from the 10-K. Five years at the chosen growth rate,
-five more fading linearly to terminal growth, then a Gordon terminal value. Everything is discounted at the WACC
-(default: CAPM, risk-free + beta × 5% equity premium, kept between 7% and 14%). Equity = enterprise value − net debt;
-divided by shares outstanding. *Undervalued* / *Overvalued* means the base value is more than 10% above / below the price.
-Bear = half the growth and +1 pt WACC; bull = 1.5× growth and −1 pt WACC.
+**DCF: four valuations.** A 5-year model driven by revenue. Revenue grows at the chosen rate; the EBITDA margin moves
+in a straight line from last year's level to your year-5 target; D&A and capex are a % of revenue; working capital absorbs a
+% of each year's new revenue; taxes apply to EBIT.
 
-**Reverse DCF.** Solves for the growth rate that makes the DCF value equal today's price: what the market is "paying for".
+- **Unlevered (FCFF at WACC):** FCFF = EBIT × (1 − tax) + D&A − capex − Δ working capital. Discounted at the WACC
+  (cost of equity from CAPM and after-tax cost of debt, weighted by market value). Enterprise value − net debt = equity.
+- **Levered (FCFE at cost of equity):** FCFE = FCFF − interest × (1 − tax) + net new borrowing (debt grows with revenue).
+  Discounted at the cost of equity; cash on hand is added.
+- **Terminal value:** either *perpetual growth* (the last year's cash flow grows forever at g) or an *EV/EBITDA exit
+  multiple* (the business is sold at year 5). The app shows what each implies about the other as a sanity check.
+- **Intrinsic value** is the average of the four. *Undervalued* / *Overvalued* = more than 10% above / below the price.
+
+**Reverse DCF.** Solves for the 5-year growth rate that makes the unlevered perpetuity value equal today's price.
+
+**Analyst consensus.** Monthly buy / hold / sell counts from the analysts covering the stock (Finnhub recommendation
+trends). Score: strong buy = 5 … strong sell = 1.
+
+**Model lean (Buy / Hold / Sell).** Gemini weighs the DCF with your assumptions, momentum, risk and the consensus, and
+must say what would change its mind. It is a starting point for your own research, not advice.
 
 **DCF for Mexican ADRs.** Not automatic: they file a 20-F in IFRS and pesos, and one ADR equals several local shares.
 Their multiples (Finnhub) are still shown.

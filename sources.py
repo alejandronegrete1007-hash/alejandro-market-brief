@@ -157,8 +157,43 @@ def key_metrics(symbol: str) -> dict:
         "div_yield": m.get("currentDividendYieldTTM") or m.get("dividendYieldIndicatedAnnual"),
         "hi52": m.get("52WeekHigh"), "lo52": m.get("52WeekLow"),
         "beta": m.get("beta"),
+        "ytd": m.get("yearToDatePriceReturnDaily"),     # percent, as of last close
+        "r52": m.get("52WeekPriceReturnDaily"),
     }
     return {k: (float(v) if isinstance(v, (int, float)) else None) for k, v in pick.items()}
+
+
+@st.cache_data(ttl=12 * 3600, show_spinner=False)
+def recommendations(symbol: str) -> list[dict]:
+    """Wall Street analyst ratings by month (Finnhub, free): strong buy ... strong sell counts."""
+    rows = _fh("/stock/recommendation", symbol=symbol) or []
+    return sorted(rows, key=lambda r: r.get("period", ""), reverse=True)
+
+
+ETFS = {
+    "SPY": "S&P 500", "QQQ": "Nasdaq 100", "DIA": "Dow Jones", "IWM": "Russell 2000", "GLD": "Gold",
+    "USO": "Oil (WTI)", "EWW": "MSCI Mexico", "TLT": "20Y+ Treasuries", "IEF": "7-10Y Treasuries",
+    "HYG": "High yield bonds", "LQD": "Corporate bonds", "XLE": "Energy sector", "XLF": "Financials sector",
+    "XLK": "Tech sector", "XLV": "Health care sector", "XLY": "Consumer discretionary", "XLP": "Consumer staples",
+    "XLI": "Industrials sector", "XLU": "Utilities sector", "XLB": "Materials sector", "XLRE": "Real estate sector",
+    "SMH": "Semiconductors", "SOXX": "Semiconductors", "KRE": "Regional banks", "EEM": "Emerging markets",
+    "EWZ": "Brazil", "FXI": "China large caps", "VTI": "US total market", "VOO": "S&P 500", "IBIT": "Bitcoin ETF",
+    "SLV": "Silver", "UNG": "Natural gas", "ITA": "Aerospace & defense", "JETS": "Airlines",
+}
+
+
+def is_etf(symbol: str) -> bool:
+    return symbol.upper() in ETFS
+
+
+@st.cache_data(ttl=7 * 86400, show_spinner=False)
+def known_tickers() -> frozenset:
+    """Tickers we trust exist: every SEC registrant (incl. ADRs) plus common ETFs."""
+    try:
+        base = set(sec_ciks())
+    except Exception:
+        base = set()
+    return frozenset(base | set(ETFS))
 
 
 US_TICKER = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")

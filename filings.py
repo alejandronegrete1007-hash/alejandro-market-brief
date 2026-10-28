@@ -28,6 +28,15 @@ TAGS = {
     "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
     "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
     "short_borrowings": ["ShortTermBorrowings", "CommercialPaper"],
+    "ebit": ["OperatingIncomeLoss"],
+    "da": ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
+           "DepreciationAmortizationAndAccretionNet", "Depreciation"],
+    "tax_expense": ["IncomeTaxExpenseBenefit"],
+    "pretax": ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+               "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments",
+               "IncomeLossFromContinuingOperationsBeforeIncomeTaxesDomestic"],
+    "interest": ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt",
+                 "InterestAndDebtExpense", "InterestPaidNet"],
 }
 
 
@@ -120,10 +129,37 @@ def build(facts: dict) -> dict:
     if not sh:
         raise FilingsError("Shares outstanding aren't in the SEC data.")
 
+    ebit, da, tax_exp, pretax, interest = (annual(facts, TAGS[k]) for k in ("ebit", "da", "tax_expense", "pretax", "interest"))
+    if ebit.empty and not pretax.empty:
+        ebit = pretax.add(interest, fill_value=0)
+        notes.append("Operating income not tagged; EBIT = pre-tax income + interest.")
+    if da.empty:
+        notes.append("D&A not found; assumed zero, so EBITDA equals EBIT.")
+
+    def last(series):
+        return float(series.iloc[-1]) if not series.empty else None
+
+    def ratio(num, den, lo, hi):
+        n, d = last(num), last(den)
+        if n is None or not d:
+            return None
+        return float(min(max(n / d, lo), hi))
+
+    rev0 = last(rev)
+    ebitda = (ebit.add(da.reindex(ebit.index).fillna(0.0)) if not ebit.empty else pd.Series(dtype=float))
     tail = lambda s: s.iloc[-8:]  # noqa: E731
     return {
         "name": facts.get("entityName", ""),
         "revenue": tail(rev), "net_income": tail(ni), "ocf": tail(ocf), "capex": tail(capex), "fcf": tail(fcf),
+        "ebit": tail(ebit), "ebitda": tail(ebitda), "da": tail(da),
+        "revenue0": rev0, "fiscal_end": rev.index[-1].date().isoformat() if not rev.empty else None,
+        "ebitda_margin": ratio(ebitda, rev, -1.0, 0.9),
+        "ebitda_margin_3y": (float((ebitda.iloc[-3:] / rev.reindex(ebitda.index).iloc[-3:]).mean())
+                             if len(ebitda) >= 3 and not rev.empty else None),
+        "da_pct": ratio(da, rev, 0.0, 0.4) if not da.empty else 0.0,
+        "capex_pct": ratio(capex, rev, 0.0, 0.6) if not capex.empty else 0.0,
+        "tax_rate": ratio(tax_exp, pretax, 0.0, 0.35),
+        "interest": last(interest),
         "cash": cash_total, "debt": debt, "net_debt": debt - cash_total, "balance_date": ref,
         "shares": sh["val"], "shares_source": sh["source"], "notes": notes,
     }
