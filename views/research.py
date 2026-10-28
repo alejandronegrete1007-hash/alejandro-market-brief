@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+import re
 
 import streamlit as st
 
@@ -16,6 +17,7 @@ from views.common import name_of
 
 CONSENSUS = [(4.5, "Strong Buy", "up"), (3.5, "Buy", "up"), (2.5, "Hold", "flat"), (1.5, "Sell", "down"), (0, "Strong Sell", "down")]
 LEAN = {"Buy": "up", "Hold": "flat", "Sell": "down"}
+_LEAD = re.compile(r"^\s*(\d+[.)]|[-•*])\s*")
 
 
 def consensus(sym, ctx):
@@ -112,7 +114,8 @@ def facts(ctx) -> str:
 
 
 def _bullets(items) -> str:
-    return "".join(f"<li>{T.esc(str(x))}</li>" for x in (items or []))
+    """List items without any numbering or bullet the model added itself (the list already numbers them)."""
+    return "".join(f"<li>{T.esc(_LEAD.sub('', str(x)))}</li>" for x in (items or []))
 
 
 def _note_html(sym: str, ctx: dict, t: dict, call: str, day: str) -> str:
