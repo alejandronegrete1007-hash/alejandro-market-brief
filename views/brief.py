@@ -203,11 +203,17 @@ def _brief(quotes, eww, btc, t10, bx, fix, status):
     if not pool:
         T.show('<div class="amb-empty">No headlines came in from the news feeds right now.</div>')
     else:
+        waiting = st.empty()  # top headlines stay visible while the AI writes
+        with waiting.container():
+            T.show('<div class="amb-note" style="margin:-4px 0 6px">Top headlines while the AI writes the brief '
+                   '(about 10-30 seconds the first time every 6 hours)…</div>')
+            T.show(T.news_list(us_news[:4] + mx_news[:4], 8))
         try:
             with st.spinner("Writing today's brief..."):
                 now = dt.datetime.now(src.MX)
                 b = ai.daily_brief(_snapshot(quotes, eww, btc, t10, bx, fix),
                                    tuple(_fmt_headline(h) for h in pool), ai.stamp_6h(now))
+            waiting.empty()
             lead = T.esc(b.get("headline", ""))
             T.show(f'<div class="amb-lead"><span>›</span> {lead}</div>'
                    f'<div class="amb-brief">'

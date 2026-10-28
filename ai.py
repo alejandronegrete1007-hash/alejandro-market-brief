@@ -60,21 +60,43 @@ def pick_model() -> str:
     return models()[0]
 
 
+def _thinking(model: str) -> dict:
+    """Keep 'thinking' short: a news summary doesn't need long reasoning, and it makes
+    the answer arrive in seconds instead of minutes."""
+    if _version(model) >= 3:
+        return {"thinkingLevel": "low"}
+    if "2.5" in model:
+        return {"thinkingBudget": 0}
+    return {}
+
+
+def _post(model: str, prompt: str, temperature: float, thinking: dict):
+    cfg = {"temperature": temperature, "responseMimeType": "application/json"}
+    if thinking:
+        cfg["thinkingConfig"] = thinking
+    return requests.post(f"{API}/models/{model}:generateContent",
+                         json={"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": cfg},
+                         headers={"x-goog-api-key": _key()}, timeout=40)
+
+
+def _read(r) -> dict:
+    parts = r.json()["candidates"][0]["content"]["parts"]
+    text = [p["text"] for p in parts if p.get("text") and not p.get("thought")][-1]
+    return json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()).strip())
+
+
 def _generate(prompt: str, temperature: float = 0.3) -> dict:
     if src.DEMO:
         import demo
         return demo.fake_ai(prompt)
-    body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature, "responseMimeType": "application/json"},
-    }
     last = "no model tried"
-    for model in models()[:4]:  # busy (503), retired (404) or out of quota (429): try the next one
+    for model in models()[:4]:  # slow, busy (503), retired (404) or out of quota (429): try the next one
         try:
-            r = requests.post(f"{API}/models/{model}:generateContent", json=body,
-                              headers={"x-goog-api-key": _key()}, timeout=60)
+            r = _post(model, prompt, temperature, _thinking(model))
+            if r.status_code == 400 and _thinking(model):  # model doesn't take that setting
+                r = _post(model, prompt, temperature, {})
         except requests.RequestException as e:
-            last = f"{model}: {e.__class__.__name__}"
+            last = f"{model}: {'too slow' if isinstance(e, requests.Timeout) else e.__class__.__name__}"
             continue
         if r.status_code in (404, 429, 500, 503):
             last = f"{model} returned {r.status_code}"
@@ -82,11 +104,9 @@ def _generate(prompt: str, temperature: float = 0.3) -> dict:
         if r.status_code >= 400:
             raise AIError(f"Gemini returned an error ({r.status_code}).")
         try:
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            return json.loads(re.sub(r"^```(?:json)?|```$", "", text.strip()).strip())
+            return _read(r)
         except Exception:
             last = f"{model}: unreadable answer"
-            continue
     raise AIError(f"Gemini is busy or out of free quota right now ({last}). Try again in a few minutes.")
 
 
