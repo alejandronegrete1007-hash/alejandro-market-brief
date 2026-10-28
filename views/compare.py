@@ -119,12 +119,50 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
             suggested = src.peers(sym)
         except Exception:
             suggested = []
-    options = list(dict.fromkeys(suggested[:12] + [s for s in state.all_symbols() if s != sym]))
-    picked = st.multiselect("Compare with (up to 4)", options, default=suggested[:3], max_selections=4,
-                            key=f"cmp_peers_{sym}", format_func=lambda s: f"{s} · {name_of(s)}")
-    extra = st.text_input("Add another ticker", key=f"cmp_extra_{sym}", placeholder="e.g. NVDA").upper().strip()
-    if extra and extra not in picked and extra != sym:
-        picked = (picked + [extra])[:5]
+    sel = f"cmp_sel_{sym}"
+    ss = st.session_state
+    if sel not in ss:
+        ss[sel] = suggested[:3]
+
+    def _add_peer(t: str):
+        if t != sym and t not in ss[sel] and len(ss[sel]) < 5:
+            ss[sel] = ss[sel] + [t]
+
+    def _pill_add(k: str):
+        v = ss.get(k)
+        if v:
+            _add_peer(v)
+        ss[k] = None
+
+    def _pill_remove(k: str):
+        v = ss.get(k)
+        if v:
+            ss[sel] = [t for t in ss[sel] if t != v]
+        ss[k] = None
+
+    picked = list(ss[sel])
+    if picked:
+        st.pills("Comparing with · tap to remove", picked, selection_mode="single", key=f"cmp_rm_{sym}",
+                 on_change=_pill_remove, args=(f"cmp_rm_{sym}",), format_func=lambda t: f"✕  {t}")
+    ideas = [t for t in dict.fromkeys(suggested[:10] + [x for x in state.all_symbols() if x != sym]) if t not in picked][:12]
+    if ideas and len(picked) < 5:
+        st.pills("Suggestions · tap to add", ideas, selection_mode="single", key=f"cmp_sug_{sym}",
+                 on_change=_pill_add, args=(f"cmp_sug_{sym}",), format_func=lambda t: f"+  {t}")
+    q = st.text_input("Search a competitor by name or ticker", key=f"cmp_q_{sym}",
+                      placeholder="e.g. Samsung, Xiaomi, Sony, HP…")
+    if q:
+        try:
+            res = [r for r in src.search(q) if r["symbol"] != sym]
+        except Exception:
+            res = []
+        if not res:
+            st.caption("No US-traded listing found for that name. Companies listed only abroad (Seoul, Hong Kong, "
+                       "Tokyo…) aren't in the free data plans.")
+        for r in res[:6]:
+            c1, c2 = st.columns([5, 1])
+            otc = len(r["symbol"]) == 5 and r["symbol"][-1] in "FY"
+            c1.markdown(f"**{r['symbol']}** · {r['name']}" + (" · *OTC (over-the-counter)*" if otc else ""))
+            c2.button("Add", key=f"cmp_add_{sym}_{r['symbol']}", on_click=_add_peer, args=(r["symbol"],), width="stretch")
     group = [sym] + picked
     rows = []
     with st.spinner("Loading competitor metrics..."):
@@ -146,6 +184,10 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
                          "EV/EBITDA": km.get("ev_ebitda"), "P/S": km.get("ps"), "Net margin": km.get("net_margin"),
                          "Rev. growth": km.get("rev_growth"), "ROE": km.get("roe"), "Analysts": score})
     comp = pd.DataFrame(rows).set_index("Ticker")
+    if not picked:
+        T.show('<div class="amb-empty">Pick or search at least one competitor to build the comparison table.</div>')
+        return
+    no_data = [t for t in picked if comp.loc[t, ["Price", "P/E", "EV/EBITDA", "P/S"]].isna().all()]
     peers_only = comp.drop(index=sym) if len(comp) > 1 else comp
     med = peers_only.median(numeric_only=True)
 
@@ -191,6 +233,9 @@ def render(sym: str, close: pd.Series, prof: dict, rf: float, market: str, ctx: 
                f'{"; ".join(msgs)} vs the median of the peers selected. Green cells beat the peer median '
                f'(cheaper multiple, or higher growth, margin, return or rating); red ones lag it.</p></div>')
         ctx["vs_peers"] = f"vs peers {', '.join(picked)}: " + "; ".join(msgs)
+    if no_data:
+        T.show(f'<div class="amb-note" style="color:var(--gold)">No free data for {T.esc(", ".join(no_data))}. Usually this means the '
+               'company trades over-the-counter or only on a foreign exchange, which the free plans do not cover.</div>')
     T.show('<div class="amb-note">Multiples are trailing twelve months unless marked forward. "Analysts" is the consensus score '
            '(5 = all strong buy, 1 = all strong sell). Click a competitor to open its analysis.</div>')
 

@@ -245,7 +245,7 @@ def search(query: str) -> list[dict]:
     out, seen = [], set()
     for r in res:
         sym = (r.get("symbol") or "").upper()
-        if r.get("type") in ("Common Stock", "ADR", "ETP") and US_TICKER.match(sym) and sym not in seen:
+        if r.get("type") in ("Common Stock", "ADR", "GDR", "ETP", "NY Reg Shrs") and US_TICKER.match(sym) and sym not in seen:
             seen.add(sym)
             out.append({"symbol": sym, "name": (r.get("description") or "").title()})
     return out[:8]
