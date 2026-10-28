@@ -22,7 +22,7 @@ Every morning it answers three questions in about five minutes: what moved, why,
 - **Drivers** (all adjustable): tax rate, revenue/earnings growth (years 1–5), WACC, cost of equity, perpetual growth,
   EV/EBITDA exit multiple, year-5 EBITDA margin, capex and D&A as % of revenue, working capital per dollar of new revenue.
   Defaults come from the latest 10-K (SEC XBRL), the peer group and market data: growth = 5-year CAGR capped at 15%,
-  year-5 margin = the company's 5-year average (mean reversion), exit multiple = peer median EV/EBITDA,
+  year-5 margin = the company's 5-year average (mean reversion), exit multiple = the lower of today's own and the peer median EV/EBITDA (no assumed re-rating),
   working capital = (receivables + inventory − payables) / revenue.
 - **Unlevered DCF**: FCFF = EBIT(1−t) + D&A − capex − ΔNWC, discounted at WACC; EV − net debt = equity.
 - **Levered DCF**: FCFE = FCFF − interest(1−t) + net borrowing, discounted at the cost of equity.

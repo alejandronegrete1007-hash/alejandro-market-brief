@@ -122,10 +122,20 @@ def render(sym, q, m, rf, rf_label, close, market, ctx):
     target0 = m_avg if (m_avg is not None and m_avg > 0) else (m0 if m0 > 0 else 0.10)
     nwc0 = f.get("nwc_pct")
     nwc0 = 0.10 if nwc0 is None else nwc0
+    # Exit multiple: the lower of today's own EV/EBITDA and the peers' median, so the model never assumes the stock
+    # gets re-rated upward, kept between 4x and 25x because by year 5 the business is assumed to be mature.
     peer_ev = (pm.get("ev_ebitda") or {}).get("median")
-    mult0 = peer_ev if peer_ev and 2 <= peer_ev <= 40 else (cur_mult or 12.0)
-    mult_src = (f"median of {pm['ev_ebitda']['n']} peers ({', '.join(pm['tickers'][:5])})" if peer_ev and 2 <= peer_ev <= 40
-                else f"today's EV/EBITDA ({T.mult(cur_mult)})")
+    cands = [(x, lbl) for x, lbl in (
+        (cur_mult, f"today's own EV/EBITDA ({T.mult(cur_mult)})"),
+        (peer_ev, f"median of {pm['ev_ebitda']['n']} peers ({T.mult(peer_ev)}: {', '.join(pm['tickers'][:5])})" if peer_ev else "")
+    ) if x and x > 0]
+    if cands:
+        mult0, mult_src = min(cands, key=lambda c: c[0])
+        others = [lbl for x, lbl in cands if lbl != mult_src]
+        mult_src = f"the lower of {mult_src}" + (f" and {others[0]}" if others else "")
+    else:
+        mult0, mult_src = 12.0, "a market-average 12x (no multiple available)"
+    mult0 = float(np.clip(mult0, 4.0, 25.0))
 
     T.section("Assumptions", f"defaults from the 10-K (FY ending {f['fiscal_end']}), peers and market data", "Discounted cash flow")
     erp_tag = f"{erp:.4f}"  # rates that depend on the premium reset when it changes
@@ -144,7 +154,7 @@ def render(sym, q, m, rf, rf_label, close, market, ctx):
                      "Growth forever after year 5. Keep it at or below long-run nominal GDP and below the risk-free rate.")
     with c[4]:
         mult = st.slider("EV/EBITDA exit multiple", 2.0, 40.0, float(np.clip(round(mult0 * 2) / 2, 2.0, 40.0)), 0.5,
-                         key=k + "mult", help=f"Default: {mult_src}. Using peers avoids assuming today's own multiple lasts forever.",
+                         key=k + "mult", help=f"Default: {mult_src}, kept between 4x and 25x. By year 5 the business is mature, so the default never assumes a re-rating.",
                          format="%.1fx")
     c = st.columns(5)
     with c[0]:

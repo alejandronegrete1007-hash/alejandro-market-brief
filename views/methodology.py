@@ -72,7 +72,8 @@ at 15%); the EBITDA margin moves in a straight line from last year's level to yo
   Cash on hand is added.
 - **Terminal value:** *perpetual growth* values a normalized year 6 (revenue, working capital and borrowing grow at the
   perpetual rate; capex settles at no more than 15% above D&A) as a growing perpetuity, or an *EV/EBITDA exit multiple*
-  sells the business at year 5 (default multiple: the median of Finnhub's peer group). Each implies the other as a check.
+  sells the business at year 5 (default multiple: the lower of today's own EV/EBITDA and the peer-group median, kept
+  between 4x and 25x, so the model never assumes a re-rating). Each implies the other as a check.
 - **Scenarios:** bear and bull move growth ±5 pts, the year-5 margin ±15%, the exit multiple ±20% and discount rates ∓1 pt.
   Intrinsic value is the probability-weighted average (25 / 50 / 25 by default) of each scenario's four-method average.
   *Undervalued* / *Overvalued* = more than 10% above / below the price.
