@@ -53,9 +53,11 @@ export default function(component) {
   if (root) return;
   root = document.createElement('div');
   root.className = 'amb-search';
+  const hotkey = !(data && data.hotkey === false);
+  const ph = esc((data && data.placeholder) || 'Search company or ticker');
   root.innerHTML = `<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg>
-    <input type="text" placeholder="Search company or ticker" aria-label="Search a company or ticker" autocomplete="off" spellcheck="false">
-    <kbd>/</kbd><ul role="listbox"></ul>`;
+    <input type="text" placeholder="${ph}" aria-label="${ph}" autocomplete="off" spellcheck="false">
+    ${hotkey ? '<kbd>/</kbd>' : ''}<ul role="listbox"></ul>`;
   parentElement.appendChild(root);
   const input = root.querySelector('input'), list = root.querySelector('ul');
   let items = [], active = 0;
@@ -87,13 +89,20 @@ export default function(component) {
   });
   list.addEventListener('mousedown', e => { const li = e.target.closest('li[data-s]'); if (li) { e.preventDefault(); go(li.dataset.s); } });
   document.addEventListener('mousedown', e => { if (!root.contains(e.target)) close(); });
-  document.addEventListener('keydown', e => {
+  if (hotkey) document.addEventListener('keydown', e => {
     const tag = (document.activeElement && document.activeElement.tagName) || '';
     if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(tag)) { e.preventDefault(); input.focus(); }
   });
 }
 """
 _search = st.components.v2.component("amb_search", js=_JS, isolate_styles=False)
+
+
+def picker(key: str, placeholder: str = "Search company or ticker") -> str | None:
+    """The same search box inline in a page; returns the ticker picked in this run, if any."""
+    r = _search(data={"hotkey": False, "placeholder": placeholder}, key=key, on_go_change=lambda: None)
+    go = getattr(r, "go", None)
+    return go[2:] if go and go.startswith("t:") else None
 
 
 def render():

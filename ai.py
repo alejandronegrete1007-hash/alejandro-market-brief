@@ -219,6 +219,31 @@ Return JSON exactly like: {{"sectors": {{"<sector name>": {{"tone": "Positive", 
     return out.get("sectors") or {}
 
 
+@st.cache_data(ttl=6 * 3600, show_spinner=False, max_entries=20)
+def portfolio_review(facts: str, day: str) -> dict:
+    """A short review of a personal portfolio, written only from its computed numbers."""
+    prompt = f"""{STYLE}
+
+Review this stock portfolio for its owner, the way a portfolio manager would summarize it in a monthly
+report. Today is {day}. Use only the numbers below.
+
+PORTFOLIO DATA (computed by the app):
+{facts}
+
+Return JSON exactly like:
+{{
+  "headline": "one sentence verdict on how the portfolio is doing, with its return vs the S&P 500",
+  "performance": "2-3 sentences: total return, time-weighted return vs the S&P 500 and what the gap means",
+  "drivers": "2-3 sentences: which positions drove the result (contribution in dollars and % of the gain), which hurt",
+  "risk": "2-3 sentences: concentration (largest weight, effective number of positions), beta, volatility, VaR in dollars",
+  "diversification": "1-2 sentences on sector and correlation exposure given the holdings",
+  "watch": ["2-3 things to monitor, e.g. a position's weight drifting up, upcoming earnings dates given"],
+  "ideas": ["2-3 portfolio-construction ideas to consider (rebalancing, position limits, diversifying), framed as options, never as instructions to buy or sell a specific security"]
+}}
+Never invent numbers or events. This is an educational review, not personalized investment advice."""
+    return _generate(prompt, temperature=0.3)
+
+
 def stamp_6h(now) -> str:
     return f"{now:%Y-%m-%d}-{now.hour // 6}"
 

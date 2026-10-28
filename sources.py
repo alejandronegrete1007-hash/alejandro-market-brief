@@ -425,6 +425,32 @@ def history(symbol: str, outputsize: int = 520) -> pd.DataFrame:
     return _frame(d["values"])
 
 
+@st.cache_data(ttl=30 * 86400, show_spinner=False, max_entries=500)
+def _close_window(symbol: str, day: str) -> list[tuple[str, float]]:
+    d = dt.date.fromisoformat(day)
+    r = _td("/time_series", symbol=symbol, interval="1day",
+            start_date=(d - dt.timedelta(days=10)).isoformat(), end_date=(d + dt.timedelta(days=1)).isoformat())
+    return [(v["datetime"][:10], float(v["close"])) for v in r.get("values") or []]
+
+
+def close_on(symbol: str, day: dt.date) -> tuple[dt.date, float]:
+    """Closing price on `day`, or on the last trading day before it (weekends and holidays).
+    Uses the cached two-year history when it covers the date, so it usually costs no extra request."""
+    if day >= dt.date.today():
+        q = quote(symbol)
+        return q["time"].date(), q["price"]
+    h = try_history(symbol)
+    if h is not None and h.index[0].date() <= day:
+        s = h["close"][h.index <= pd.Timestamp(day)]
+        if len(s):
+            return s.index[-1].date(), float(s.iloc[-1])
+    rows = [(d, c) for d, c in _close_window(symbol, day.isoformat()) if d <= day.isoformat()]
+    if not rows:
+        raise DataError(f"No closing price for {symbol} on or before {day:%b %d, %Y}.")
+    d, c = max(rows)
+    return dt.date.fromisoformat(d), c
+
+
 def try_history(symbol: str) -> pd.DataFrame | None:
     try:
         return history(symbol)

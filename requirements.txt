@@ -6,3 +6,5 @@ plotly==7.1.0
 requests==2.34.2
 feedparser==6.0.14
 scipy==1.18.1
+fpdf2==2.8.9
+matplotlib==3.11.2

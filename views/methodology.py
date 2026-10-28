@@ -95,9 +95,10 @@ Positive EVA means the return on capital beats its cost.
 average loss beyond it) from two years of real daily returns, compared with what a normal distribution would say, plus
 skewness and excess kurtosis. Real returns have fatter tails than the bell curve.
 
-**Portfolio and P&L.** Positions (ticker, shares, average cost, date) are marked to market with live quotes: market value,
-daily P&L (shares × today's change), unrealized P&L (market value − cost basis) and weight in net liquidation value
-(positions + cash). Performance is the time-weighted return: each purchase is new money on its date, so
+**Portfolio and P&L.** You enter the stock, the date and the number of shares; the buy price is that day's closing price
+(the previous trading day's close for a weekend or holiday). Each purchase is marked to market with live quotes: value,
+today's P&L (shares × today's change), P&L and return since purchase, and the S&P 500 (SPY) from the same close to today,
+so each line shows whether it beat buying the index. Performance is the time-weighted return: each purchase is new money on its date, so
 r_t = (V_t − F_t) / V_(t−1) − 1, compared with SPY over the same days. Risk applies today's weights to two years of daily
 returns (historical simulation): beta, annualized volatility, 1-day VaR and expected shortfall in dollars, and the effective
 number of positions (1 / Σw²).

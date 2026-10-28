@@ -4,7 +4,6 @@ comes from Gemini; the call (Buy / Hold / Sell) is yours to save and track."""
 from __future__ import annotations
 
 import datetime as dt
-import html
 import re
 
 import streamlit as st
@@ -118,39 +117,60 @@ def _bullets(items) -> str:
     return "".join(f"<li>{T.esc(_LEAD.sub('', str(x)))}</li>" for x in (items or []))
 
 
-def _note_html(sym: str, ctx: dict, t: dict, call: str, day: str) -> str:
-    """A standalone, printable copy of the note (open it in a browser and print to PDF)."""
+def _note_pdf(sym: str, ctx: dict, t: dict, call: str, day: str) -> bytes:
+    """The research note as a printable PDF."""
+    import pdf_report as R
     d = ctx.get("dcf") or {}
-    q = ctx["q"]
-    e = html.escape
-    rows = ""
+    q, m = ctx["q"], ctx["m"]
+    doc = R.Doc(f"{sym} research note", f"{sym} research note, {day}")
+    doc.title_block(f"{name_of(sym)} ({sym})",
+                    [f"Research note · {day} · price ${q['price']:,.2f} · {T.pct(m.get('ytd'))} this year",
+                     f"Wall Street consensus: {ctx.get('consensus_label') or 'n/a'}"])
+    doc.set_font("Spectral", "", 18)
+    doc.set_text_color(*({"Buy": R.UP, "Sell": R.DOWN}.get(call, R.INK)))
+    doc.cell(0, 9, R._t(f"{call} · {t.get('conviction', '')} conviction"), new_x="LMARGIN", new_y="NEXT")
+    doc.ln(1)
+    doc.para(t.get("one_liner", ""), 11.5, bold=True)
+    figures = [("Price", f"${q['price']:,.2f}")]
     if d:
-        for nm in ("Bear", "Base", "Bull"):
-            rows += f"<tr><td>{nm}</td><td>{d['probs'][nm]}%</td><td>${d['scenarios'][nm]:,.2f}</td></tr>"
-        rows += f"<tr><th>Probability-weighted</th><th></th><th>${d['weighted']:,.2f}</th></tr>"
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(sym)} research note</title>
-<style>body{{font:15px/1.6 'Inter Tight',Arial,sans-serif;color:#1d2026;max-width:760px;margin:40px auto;padding:0 24px}}
-h1,h2{{font-family:Spectral,Georgia,serif;font-weight:500}}h1{{font-size:30px;margin:0}}h2{{font-size:19px;margin:26px 0 6px;border-bottom:1px solid #d9dce1}}
-.meta{{color:#666;font-size:13px}}.call{{font:500 22px Spectral,Georgia,serif;margin:14px 0}}table{{border-collapse:collapse;width:100%}}
-td,th{{padding:6px 8px;border-bottom:1px solid #e3e5e8;text-align:left;font-variant-numeric:tabular-nums}}</style></head><body>
-<div class="meta">Alejandro Market Brief · research note · {e(day)}</div>
-<h1>{e(name_of(sym))} ({e(sym)})</h1>
-<div class="meta">Price ${q['price']:,.2f} · consensus {e(ctx.get('consensus_label') or 'n/a')}</div>
-<div class="call">Call: {e(call)} · {e(t.get('conviction', ''))} conviction</div>
-<p><b>{e(t.get('one_liner', ''))}</b></p>
-<h2>Thesis</h2><ol>{_bullets(t.get('thesis'))}</ol>
-<h2>Where we differ</h2><p>{e(t.get('variant', ''))}</p>
-<h2>Valuation</h2><p>{e(t.get('valuation', ''))}</p><table>{rows}</table>
-<h2>Quality</h2><p>{e(t.get('quality', ''))}</p>
-<h2>Scenarios</h2><p><b>Bull.</b> {e(t.get('bull', ''))}</p><p><b>Base.</b> {e(t.get('base', ''))}</p><p><b>Bear.</b> {e(t.get('bear', ''))}</p>
-<h2>Catalysts</h2><ul>{_bullets(t.get('catalysts'))}</ul>
-<h2>Risks</h2><ul>{_bullets(t.get('risks'))}</ul>
-<h2>What to monitor</h2><ul>{_bullets(t.get('monitor'))}</ul>
-<h2>What would change the call</h2><p>{e(t.get('changes_mind', ''))}</p>
-<p><b>{e(t.get('bottom_line', ''))}</b></p>
-<p class="meta">Built from public data (SEC filings, Finnhub, Twelve Data, FRED) with the analyst's own DCF assumptions; the
-written sections were drafted by a language model from those numbers and reviewed by the analyst. Not investment advice.</p>
-</body></html>"""
+        figures += [("Intrinsic value (weighted)", f"${d['weighted']:,.2f}"), ("vs price", T.pct(d["gap"], 0)),
+                    ("Bear - bull", f"${d['scenarios']['Bear']:,.0f} - ${d['scenarios']['Bull']:,.0f}"),
+                    ("WACC", T.pct(d["wacc"], 1, False)),
+                    ("Price implies", (T.pct(d["implied_g"], 1) + " growth") if d.get("implied_g") is not None else "-")]
+    e_ = ctx.get("eva_d")
+    if e_:
+        figures.append(("ROIC vs WACC", f"{e_['roic']:.0%} vs {e_['wacc']:.0%}"))
+    doc.metrics(figures, 3)
+    doc.h2("Thesis")
+    doc.bullets(t.get("thesis"), numbered=True)
+    doc.h2("Where this view differs")
+    doc.para(t.get("variant", ""))
+    doc.h2("Valuation")
+    doc.para(t.get("valuation", ""))
+    if d:
+        rows = [[nm, f"{d['probs'][nm]}%", f"${d['scenarios'][nm]:,.2f}", T.pct(d['scenarios'][nm] / q['price'] - 1, 0)]
+                for nm in ("Bear", "Base", "Bull")]
+        rows.append(["Probability-weighted", "100%", f"${d['weighted']:,.2f}", T.pct(d['gap'], 0)])
+        doc.grid_table(["Scenario", "Probability", "Value per share", "vs price"], rows, bold_last=True)
+    doc.h2("Quality")
+    doc.para(t.get("quality", ""))
+    doc.h2("Scenarios")
+    for k in ("bull", "base", "bear"):
+        doc.para(f"{k.title()} case. {t.get(k, '')}")
+    doc.h2("Catalysts")
+    doc.bullets(t.get("catalysts"))
+    doc.h2("Risks")
+    doc.bullets(t.get("risks"))
+    doc.h2("What to monitor")
+    doc.bullets(t.get("monitor"))
+    doc.h2("What would change the call")
+    doc.para(t.get("changes_mind", ""))
+    doc.para(t.get("bottom_line", ""), 11, bold=True)
+    doc.ln(2)
+    doc.para("Built from public data (SEC filings, Finnhub, Twelve Data, FRED) with the analyst's own DCF assumptions. The "
+             "written sections were drafted by a language model from those numbers and reviewed by the analyst. "
+             "Not investment advice.", 8, R.MUTED)
+    return doc.output_bytes()
 
 
 def render(sym: str, ctx: dict):
@@ -232,8 +252,7 @@ def render(sym: str, ctx: dict):
                              "conviction": t.get("conviction")})
             st.toast(f"Saved: {call or lean} {sym} at {T.money(q['price'])}")
     with c3:
-        st.download_button("Download note", _note_html(sym, ctx, t, call or lean, day), file_name=f"{sym}_research_note_{day}.html",
-                           mime="text/html", key=f"dl_{sym}", width="stretch")
+        st.download_button("Download PDF", _note_pdf(sym, ctx, t, call or lean, day), file_name=f"{sym}_research_note_{day}.pdf",
+                           mime="application/pdf", key=f"dl_{sym}", width="stretch")
     T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>The written sections are drafted by a language model only '
-           'from the numbers on this page; check them before relying on them. The call is yours. Not investment advice. '
-           'The download opens in any browser; print it to PDF to share.</div>')
+           'from the numbers on this page; check them before relying on them. The call is yours. Not investment advice.</div>')

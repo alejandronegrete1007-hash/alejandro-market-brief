@@ -289,13 +289,22 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-nrow .amb-tk{margin-right:6px;padding:2px 7px;cursor:pointer;}
 .amb-sub-name{display:block;color:var(--muted);font-size:.72rem;font-weight:400;margin-top:1px;}
 .amb-table.pnl td{white-space:nowrap;}
+.amb-x{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border-radius:var(--r-sm);
+  color:var(--muted);border:1px solid var(--line2);cursor:pointer;font-size:.72rem;}
+.amb-x:hover{color:var(--down);border-color:var(--down);}
+.amb-picked{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px dashed var(--line2);border-radius:var(--r);
+  color:var(--muted);font-size:.86rem;white-space:nowrap;overflow:hidden;}
+.amb-picked b{color:var(--text);}
+.st-key-pf_pick .amb-search input{height:40px;}
 .amb-table.pnl th:first-child,.amb-table.pnl td:first-child{position:sticky;left:0;background:var(--card);z-index:1;}
 .amb-swipe{display:none;color:var(--muted);font-size:.72rem;margin:6px 0 0;}
 @media (max-width:640px){
-  .amb-table.pnl th:nth-child(2),.amb-table.pnl td:nth-child(2),.amb-table.pnl th:nth-child(6),.amb-table.pnl td:nth-child(6),
-  .amb-table.pnl th:nth-child(7),.amb-table.pnl td:nth-child(7){display:none;}
+  .amb-table.pnl th:nth-child(3),.amb-table.pnl td:nth-child(3),.amb-table.pnl th:nth-child(6),.amb-table.pnl td:nth-child(6){display:none;}
   .amb-table.pnl td,.amb-table.pnl th{padding:9px 7px;font-size:.8rem;}
   .amb-swipe{display:block;}
+  .amb-lb thead{display:none;}
+  .amb-lb tr{display:block;padding:10px 0;border-bottom:1px solid var(--line);}
+  .amb-lb td{display:block;border:none!important;padding:2px 0!important;text-align:left!important;}
 }
 
 /* 10c. HEADER SEARCH ---------------------------------------------------------- */
@@ -319,7 +328,8 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-search li.on,.amb-search li[data-s]:hover{background:rgba(127,167,255,.12);}
 .amb-search li.hint{color:var(--muted);font-size:.82rem;cursor:default;}
 @media (max-width:1180px){.st-key-amb_search{width:230px!important;right:190px;}}
-@media (max-width:900px){.st-key-amb_search{position:static!important;width:100%!important;margin-bottom:6px;}}
+@media (max-width:900px){.st-key-amb_search{position:relative!important;top:auto;right:auto;width:100%!important;margin-bottom:6px;z-index:auto;}}
+.amb-search ul{z-index:50;}
 
 /* no text cursor on text that can't be edited (Chrome's caret browsing showed one everywhere) */
 body *:not(input):not(textarea):not([contenteditable="true"]){caret-color:transparent;}

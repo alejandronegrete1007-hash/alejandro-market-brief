@@ -262,6 +262,14 @@ def fake_ai(prompt: str) -> dict:
                 {"market": "MX", "title": "BMV edges up", "what": "The IPC rose 0.3%.", "why": "Shows local stocks holding up.",
                  "watch": "Q3 reports from large issuers.", "sources": [7, 99]},
             ]}
+    if "Review this stock portfolio" in prompt:
+        return {"headline": "Demo: the portfolio is well ahead of the S&P 500, led by one position.",
+                "performance": "Demo: time-weighted return is far above the index over the same period.",
+                "drivers": "Demo: the largest gain came from the biggest position; one holding lagged.",
+                "risk": "Demo: concentration is moderate with about four effective positions; beta near the market.",
+                "diversification": "Demo: holdings lean to technology and cyclicals.",
+                "watch": ["Weight of the largest position", "Next earnings dates"],
+                "ideas": ["Set a maximum weight per position", "Rebalance quarterly back to target weights"]}
     if "For each sector below" in prompt:
         names = re.findall(r"^## (.+)$", prompt, flags=re.M)
         tones = ["Positive", "Mixed", "Negative"]

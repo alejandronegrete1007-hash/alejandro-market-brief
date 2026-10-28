@@ -24,12 +24,6 @@ def _on_select(key: str):
     st.session_state["an_other"] = ""
 
 
-def _on_type():
-    v = (st.session_state.get("an_other") or "").upper().strip()
-    if v:
-        state.focus(v)
-
-
 def _pick() -> str | None:
     options = state.all_symbols()
     focus = st.session_state.get("focus") or (options[0] if options else None)
@@ -37,13 +31,10 @@ def _pick() -> str | None:
         options = [focus] + options
     if focus and not st.session_state.get("focus"):
         state.focus(focus)
-    c1, c2 = st.columns([2, 1], gap="medium")
     key = f"an_sel_{focus}"
-    with c1:
-        st.selectbox("Stock", options, index=options.index(focus) if focus in options else 0,
-                     format_func=lambda s: f"{s} · {name_of(s)}", key=key, on_change=_on_select, args=(key,))
-    with c2:
-        st.text_input("Or type any ticker", placeholder="e.g. NVDA, WMT, SPY", key="an_other", on_change=_on_type)
+    st.selectbox("Your stocks (or use the search box at the top for any company)", options,
+                 index=options.index(focus) if focus in options else 0,
+                 format_func=lambda s: f"{s} · {name_of(s)}", key=key, on_change=_on_select, args=(key,))
     return focus
 
 

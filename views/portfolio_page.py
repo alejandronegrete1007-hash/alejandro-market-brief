@@ -2,20 +2,22 @@
 portfolio lab (Markowitz) to see how the stocks you hold or follow combine."""
 from __future__ import annotations
 
+import base64
 import datetime as dt
-import json
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import ai
 import portfolio as P
 import quant as Q
 import sources as src
 import state
 import theme as T
 import valuation as V
+from views import search
 from views.common import click, name_of
 
 
@@ -58,188 +60,339 @@ def _example() -> dict:
     """$10,000 in each 2026 S&P 500 leader at the Dec 31, 2025 close."""
     pos = []
     for s in state.US_LEADERS:
-        h = src.try_history(s)
-        if h is None:
+        try:
+            d, px = src.close_on(s, dt.date(2025, 12, 31))
+        except Exception:
             continue
-        base = h["close"][h.index < pd.Timestamp("2026-01-01")]
-        if len(base):
-            px = float(base.iloc[-1])
-            pos.append({"sym": s, "shares": round(10000 / px, 4), "cost": round(px, 4), "date": str(base.index[-1].date())})
+        pos.append({"sym": s, "shares": round(10000 / px, 4), "cost": round(px, 4), "date": d.isoformat()})
     return {"cash": 0.0, "positions": pos}
 
 
-def _editor(pf: dict):
-    rows = pd.DataFrame(pf["positions"] or [], columns=["sym", "shares", "cost", "date"])
-    rows["date"] = pd.to_datetime(rows["date"], errors="coerce")
-    with st.expander("Edit positions", expanded=not pf["positions"]):
-        st.caption("One row per purchase: ticker, shares, average cost per share and the date you bought. "
-                   "Add rows at the bottom; select a row and press Delete to remove it.")
-        ed = st.data_editor(rows, num_rows="dynamic", width="stretch", key="pf_editor", hide_index=True,
-                            column_config={
-                                "sym": st.column_config.TextColumn("Ticker", required=True, max_chars=8),
-                                "shares": st.column_config.NumberColumn("Shares", min_value=0.0001, format="%.4f", required=True),
-                                "cost": st.column_config.NumberColumn("Avg cost ($)", min_value=0.0001, format="$%.2f", required=True),
-                                "date": st.column_config.DateColumn("Date bought", max_value=dt.date.today(), format="YYYY-MM-DD"),
-                            })
-        c1, c2, c3 = st.columns([1.2, 1, 1], gap="medium")
-        cash = c1.number_input("Cash ($)", min_value=0.0, value=float(pf["cash"]), step=100.0, key="pf_cash")
-        if c2.button("Save positions", type="primary", width="stretch", key="pf_save"):
-            pos = []
-            for _, r in ed.iterrows():
-                if pd.isna(r.get("sym")) or pd.isna(r.get("shares")) or pd.isna(r.get("cost")):
-                    continue
-                d = r.get("date")
-                pos.append({"sym": str(r["sym"]).upper().strip(), "shares": float(r["shares"]), "cost": float(r["cost"]),
-                            "date": "" if pd.isna(d) else str(pd.Timestamp(d).date())})
-            state.set_portfolio({"cash": cash, "positions": pos})
-            st.session_state.pop("pf_editor", None)
+def _encode(pf: dict) -> str:
+    raw = ";".join(f"{p['sym']},{p['shares']:g},{p['date']},{p['cost']:g}" for p in pf["positions"])
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def _decode(code: str) -> dict:
+    raw = base64.urlsafe_b64decode(code + "=" * (-len(code) % 4)).decode()
+    pos = []
+    for part in raw.split(";"):
+        sym, sh, d, cost = part.split(",")
+        pos.append({"sym": sym, "shares": float(sh), "date": d, "cost": float(cost)})
+    return {"cash": 0.0, "positions": pos}
+
+
+def _import_link():
+    """Open a portfolio shared as a link (…/portfolio?pf=…) on this device."""
+    code = st.query_params.get("pf")
+    if not code:
+        return
+    try:
+        state.set_portfolio(_decode(code))
+        st.toast("Portfolio loaded on this device.")
+    except Exception:
+        st.toast("That portfolio link isn't valid.")
+    del st.query_params["pf"]
+
+
+def _add_form(pf: dict):
+    T.section("Add a position", "the stock, the day you bought and how many shares · the price is that day's close")
+    pick = search.picker("pf_pick", "Search the stock you bought")
+    if pick:
+        st.session_state["pf_new_sym"] = pick
+    sym = st.session_state.get("pf_new_sym")
+    c1, c2, c3 = st.columns([1.2, 1, 1], gap="medium", vertical_alignment="bottom")
+    with c1:
+        T.show(f'<div class="amb-picked">{("<b>" + T.esc(sym) + "</b> " + T.esc(name_of(sym)[:34])) if sym else "No stock selected yet"}</div>')
+    with c2:
+        day = st.date_input("Date bought", value=dt.date.today(), min_value=dt.date(2000, 1, 3), max_value=dt.date.today(),
+                            key="pf_new_date", format="YYYY-MM-DD")
+    with c3:
+        shares = st.number_input("Shares", min_value=0.0, value=10.0, step=1.0, key="pf_new_shares", format="%.4g")
+    b1, b2, b3 = st.columns([1.2, 1, 1], gap="medium")
+    if b1.button("Add position", type="primary", width="stretch", key="pf_add", disabled=not sym or shares <= 0):
+        try:
+            with st.spinner(f"Finding {sym}'s close on {day:%b %d, %Y}..."):
+                used, px = src.close_on(sym, day)
+            state.set_portfolio({"cash": pf.get("cash", 0.0),
+                                 "positions": pf["positions"] + [{"sym": sym, "shares": shares, "cost": px, "date": used.isoformat()}]})
+            st.session_state["pf_msg"] = f"Added {shares:g} {sym} at ${px:,.2f}, the close of {used:%b %d, %Y}."
+            st.session_state.pop("pf_new_sym", None)
             st.rerun()
-        if c3.button("Load an example", width="stretch", key="pf_example",
-                     help="$10,000 in each of the five 2026 S&P 500 leaders, bought at the Dec 31, 2025 close."):
-            with st.spinner("Loading year-end prices..."):
-                state.set_portfolio(_example())
-            st.session_state.pop("pf_editor", None)
-            st.rerun()
-        st.caption("Positions live in this browser only. To use them on your phone or another computer, download them "
-                   "here and upload the file there.")
-        d1, d2 = st.columns(2, gap="medium")
-        d1.download_button("Download my portfolio", json.dumps({"portfolio": pf, "calls": st.session_state.get("calls") or [],
-                                                                "my_stocks": state.my_list()}, indent=1),
-                           file_name="alejandro_market_brief_portfolio.json", mime="application/json", width="stretch",
-                           key="pf_download")
-        up = d2.file_uploader("Upload a portfolio file", type=["json"], key="pf_upload", label_visibility="collapsed")
-        if up is not None and st.session_state.get("_pf_uploaded") != up.file_id:
-            try:
-                d = json.loads(up.getvalue().decode("utf-8"))
-                state.set_portfolio(d.get("portfolio") or {})
-                for c in d.get("calls") or []:
-                    if isinstance(c, dict) and c.get("sym") and c.get("date"):
-                        state.save_call({k: c.get(k) for k in state.CALL_FIELDS})
-                for sym in d.get("my_stocks") or []:
-                    state.add(str(sym))
-                st.session_state["_pf_uploaded"] = up.file_id
-                st.session_state.pop("pf_editor", None)
-                st.rerun()
-            except Exception:
-                st.error("That file isn't a portfolio downloaded from this app.")
+        except Exception as e:
+            st.error(f"Couldn't find {sym}'s price on that date ({e}).")
+    if b2.button("Load an example", width="stretch", key="pf_example",
+                 help="$10,000 in each of the five 2026 S&P 500 leaders, bought at the Dec 31, 2025 close."):
+        with st.spinner("Loading year-end prices..."):
+            state.set_portfolio(_example())
+        st.rerun()
+    if pf["positions"] and b3.button("Remove all", width="stretch", key="pf_clear"):
+        state.set_portfolio({"cash": 0.0, "positions": []})
+        st.rerun()
+    msg = st.session_state.pop("pf_msg", None)
+    if msg:
+        st.success(msg)
+
+
+def _lots(pos: list[dict], quotes: dict, spy_now: float | None) -> pd.DataFrame:
+    """One row per purchase with the S&P 500 over the same holding period."""
+    rows = []
+    for i, p in enumerate(pos):
+        q = quotes.get(p["sym"])
+        last = q["price"] if q else np.nan
+        prev = (q["price"] - q["change"]) if q and q.get("change") is not None else np.nan
+        try:
+            spy_then = src.close_on("SPY", dt.date.fromisoformat(p["date"]))[1] if p.get("date") else np.nan
+        except Exception:
+            spy_then = np.nan
+        value = p["shares"] * last
+        cost = p["shares"] * p["cost"]
+        ret = last / p["cost"] - 1
+        spy_ret = (spy_now / spy_then - 1) if spy_now and spy_then == spy_then else np.nan
+        rows.append({"i": i, "sym": p["sym"], "date": p.get("date") or "", "shares": p["shares"], "buy": p["cost"], "last": last,
+                     "chg": (q["pct"] / 100) if q else np.nan, "daily": p["shares"] * (last - prev), "value": value,
+                     "cost": cost, "pnl": value - cost, "ret": ret, "spy": spy_ret, "excess": ret - spy_ret})
+    return pd.DataFrame(rows)
+
+
+def _facts(lots, nav, twr, spy_ret, risk, weights) -> str:
+    lines = ["Positions (one row per purchase): " + "; ".join(
+        f"{r.sym} {r.shares:g} sh bought {r.date} at {r.buy:.2f}, now {r.last:.2f}, P&L {r.pnl:+,.0f} ({r.ret:+.1%}), "
+        f"S&P same period {r.spy:+.1%}" for r in lots.itertuples())]
+    lines.append(f"Market value {nav:,.0f}; cost {lots['cost'].sum():,.0f}; unrealized P&L {lots['pnl'].sum():+,.0f} "
+                 f"({lots['pnl'].sum() / lots['cost'].sum():+.1%}).")
+    if len(twr):
+        lines.append(f"Time-weighted return since first purchase {twr.iloc[-1]:+.1%}; S&P 500 same period "
+                     f"{spy_ret:+.1%}" if spy_ret is not None else f"Time-weighted return {twr.iloc[-1]:+.1%}")
+    lines.append("Weights: " + ", ".join(f"{s} {w:.0%}" for s, w in weights.sort_values(ascending=False).items()))
+    contrib = lots.groupby("sym")["pnl"].sum().sort_values(ascending=False)
+    lines.append("P&L contribution: " + ", ".join(f"{s} {v:+,.0f}" for s, v in contrib.items()))
+    if risk:
+        lines.append(f"Risk: beta {risk['beta']:.2f}, volatility {risk['vol']:.1%}, 1-day VaR 95% {risk['var']:.1%} "
+                     f"(${risk['var'] * nav:,.0f}), expected shortfall {risk['cvar']:.1%}, effective positions {risk['effective_n']:.1f}"
+                     if risk.get("beta") is not None else "")
+    for s in weights.index:
+        er = src.next_earnings(s)
+        if er:
+            lines.append(f"{s} next earnings {er['date']}")
+    return "\n".join(x for x in lines if x)
+
+
+def _portfolio_pdf(lots, nav, twr, spy_cum, risk, review, day) -> bytes:
+    import pdf_report as R
+    doc = R.Doc("Portfolio report", f"Portfolio report, {day}")
+    pnl, cost = float(lots["pnl"].sum()), float(lots["cost"].sum())
+    doc.title_block("Portfolio report", [f"{day} · {lots['sym'].nunique()} stocks, {len(lots)} purchases · prices at the last close"])
+    figs = [("Market value", f"${nav:,.2f}"), ("Cost", f"${cost:,.2f}"), ("Unrealized P&L", f"{'+' if pnl >= 0 else '-'}${abs(pnl):,.2f}"),
+            ("Return on cost", T.pct(pnl / cost if cost else None, 1))]
+    if len(twr):
+        figs.append(("Time-weighted return", T.pct(float(twr.iloc[-1]), 1)))
+        if spy_cum is not None:
+            figs.append(("S&P 500, same period", T.pct(float(spy_cum.iloc[-1]), 1)))
+    doc.metrics(figs, 3)
+    if review:
+        doc.para(review.get("headline", ""), 11, bold=True)
+    doc.h2("Positions")
+    rows, colors = [], []
+    for r in lots.itertuples():
+        rows.append([r.sym, r.date, f"{r.shares:,.4g}", f"${r.buy:,.2f}", f"${r.last:,.2f}", f"${r.value:,.0f}",
+                     f"{'+' if r.pnl >= 0 else '-'}${abs(r.pnl):,.0f}", T.pct(r.ret, 1), T.pct(r.spy, 1), T.pct(r.excess, 1)])
+        colors.append([None] * 6 + [R.tone_color(r.pnl), R.tone_color(r.ret), None, R.tone_color(r.excess)])
+    rows.append(["Total", "", "", "", "", f"${nav:,.0f}", f"{'+' if pnl >= 0 else '-'}${abs(pnl):,.0f}", T.pct(pnl / cost if cost else None, 1), "", ""])
+    colors.append(None)
+    doc.grid_table(["Stock", "Bought", "Shares", "Buy price", "Last", "Value", "P&L", "Return", "S&P 500", "vs S&P"],
+                   rows, widths=[13, 20, 13, 16, 16, 18, 17, 14, 17, 14], bold_last=True, colors=colors)
+    if len(twr) > 1:
+        doc.h2("Performance vs the S&P 500", keep=78)
+        series = {"Portfolio (time-weighted)": (twr.index, twr.values * 100)}
+        if spy_cum is not None:
+            series["S&P 500 (SPY)"] = (spy_cum.index, spy_cum.values * 100)
+        doc.image_png(R.line_chart(series), 62)
+    contrib = lots.groupby("sym")["pnl"].sum().sort_values(ascending=False)
+    ch = max(28, 9 * len(contrib) + 10)
+    doc.h2("Contribution to P&L", keep=ch + 14)
+    doc.image_png(R.bar_chart(list(contrib.index), [float(v) for v in contrib.values]), ch)
+    if risk and risk.get("beta") is not None:
+        doc.h2("Risk of today's holdings")
+        doc.metrics([("Beta vs S&P 500", f"{risk['beta']:.2f}"), ("Volatility", T.pct(risk["vol"], 1, False)),
+                     ("1-day VaR 95%", f"-${risk['var'] * nav:,.0f}"), ("Expected shortfall", f"-${risk['cvar'] * nav:,.0f}"),
+                     ("Effective positions", f"{risk['effective_n']:.1f}")], 3)
+    if review:
+        doc.h2("Review")
+        for k, lbl in (("performance", "Performance"), ("drivers", "What drove it"), ("risk", "Risk"),
+                       ("diversification", "Diversification")):
+            if review.get(k):
+                doc.para(f"{lbl}. {review[k]}")
+        if review.get("watch"):
+            doc.para("What to watch", bold=True)
+            doc.bullets(review["watch"])
+        if review.get("ideas"):
+            doc.para("Ideas to consider", bold=True)
+            doc.bullets(review["ideas"])
+    doc.ln(2)
+    doc.para("Prices: Finnhub (last) and Twelve Data (closes on purchase dates). Time-weighted return treats each purchase as "
+             "new money. The review is written by a language model from these numbers. Not investment advice.", 8, R.MUTED)
+    return doc.output_bytes()
 
 
 def _positions():
+    _import_link()
     pf = st.session_state.get("pf") or {"cash": 0.0, "positions": []}
-    pos, cash = pf["positions"], float(pf["cash"])
+    pos = pf["positions"]
     if not pos:
-        T.show('<div class="amb-empty">No positions yet. Add what you own below (ticker, shares, average cost and date), or '
-               'load the example portfolio to see how the page works. Nothing leaves this browser.</div>')
-        _editor(pf)
+        T.show('<div class="amb-empty">No positions yet. Search the stock, pick the day you bought it and the number of shares: '
+               'the app looks up that day\'s close as your buy price and tracks it against today\'s price and the S&amp;P 500.</div>')
+        _add_form(pf)
         return
     syms = list(dict.fromkeys(p["sym"] for p in pos))
     with st.spinner("Marking positions to market..."):
         quotes = {s: src.try_quote(s) for s in syms}
-    rows = P.pnl_rows(pos, quotes)
-    # one line per ticker, like a broker: shares add up and the average cost is weighted
-    g = rows.groupby("sym", sort=False).agg(shares=("shares", "sum"), basis=("basis", "sum"), value=("value", "sum"),
-                                            daily=("daily", "sum"), last=("last", "first"), chg_pct=("chg_pct", "first"),
-                                            date=("date", "min"))
-    g["avg"] = g["basis"] / g["shares"]
-    g["unrl"] = g["value"] - g["basis"]
-    g["unrl_pct"] = g["unrl"] / g["basis"]
-    mv = float(g["value"].sum(skipna=True))
-    nav = mv + cash
-    g["weight"] = g["value"] / nav if nav else np.nan
-    daily = float(g["daily"].sum(skipna=True))
-    basis = float(g["basis"].sum())
-    unrl = mv - basis
+        spy_q = src.try_quote("SPY")
+        lots = _lots(pos, quotes, spy_q["price"] if spy_q else None)
+    nav = float(lots["value"].sum(skipna=True))
+    cost = float(lots["cost"].sum())
+    pnl = nav - cost
+    daily = float(lots["daily"].sum(skipna=True))
     prev_nav = nav - daily
-
     with st.spinner("Loading price history (free plan: 8 requests per minute)..."):
         closes = _closes(tuple(syms))
     twr = P.time_weighted(pos, closes) if not closes.empty else pd.Series(dtype=float)
-    spy_ret = None
+    spy_cum, spy_ret = None, None
     if len(twr) > 1 and "SPY" in closes:
         spy = closes["SPY"].reindex(twr.index).ffill()
         spy_cum = spy / spy.iloc[0] - 1
         spy_ret = float(spy_cum.iloc[-1])
 
     T.show(T.kv([
-        ("Net liquidation value", _m(nav), f"positions {T.money(mv, 0)} + cash {T.money(cash, 0)}"),
-        ("Daily P&L", _signed_money(daily), T.pct(daily / prev_nav if prev_nav else None, 2) + " today"),
-        ("Unrealized P&L", _signed_money(unrl), T.pct(unrl / basis if basis else None, 1) + " on cost"),
-        ("Cost basis", _m(basis), f"{len(g)} positions"),
+        ("Market value", _m(nav), f"{len(syms)} stocks · {len(pos)} purchases"),
+        ("Unrealized P&L", _signed_money(pnl), T.pct(pnl / cost if cost else None, 1) + f" on {_m(cost)} invested"),
+        ("Today", _signed_money(daily), T.pct(daily / prev_nav if prev_nav else None, 2)),
         ("Return since first buy", f'<span style="color:var(--{T.tone(twr.iloc[-1] if len(twr) else None)})">'
          f'{T.pct(twr.iloc[-1] if len(twr) else None, 1)}</span>', "time-weighted"),
-        ("S&P 500, same period", T.pct(spy_ret, 1), "SPY, price return"),
+        ("S&P 500, same period", T.pct(spy_ret, 1), "SPY"),
+        ("Beat the market by", f'<span style="color:var(--{T.tone((twr.iloc[-1] - spy_ret) if len(twr) and spy_ret is not None else None)})">'
+         f'{T.pct((twr.iloc[-1] - spy_ret) if len(twr) and spy_ret is not None else None, 1)}</span>', "percentage points"),
     ]))
 
-    # ---- positions table
-    head = ("<th>Instrument</th><th>Position</th><th>Last</th><th>Change</th><th>Daily P&amp;L</th><th>Avg price</th>"
-            "<th>Cost basis</th><th>Market value</th><th>Unrealized P&amp;L</th><th>Unrl. %</th><th>% of NAV</th>")
+    # ---- holdings: one row per purchase, closing price that day vs today
+    head = ("<th>Stock</th><th>Bought</th><th>Shares</th><th>Buy price</th><th>Last</th><th>Today</th><th>Value</th>"
+            "<th>P&amp;L</th><th>Return</th><th>S&amp;P same period</th><th>vs S&amp;P</th><th></th>")
     body = ""
-    for sym, r in g.sort_values("value", ascending=False).iterrows():
-        body += (f'<tr><td><span{T.go_attr("t:" + sym)} style="cursor:pointer"><b style="color:var(--text)">{T.esc(sym)}</b>'
-                 f'<span class="amb-sub-name">{T.esc(name_of(sym)[:26])}</span></span></td>'
-                 f'<td>{r["shares"]:,.4g}</td><td>{_m(r["last"])}</td>'
-                 f'<td style="color:var(--{T.tone(r["chg_pct"])})">{T.pct(r["chg_pct"], 2)}</td>'
-                 f'<td>{_signed_money(r["daily"])}</td><td>{_m(r["avg"])}</td><td>{_m(r["basis"])}</td>'
-                 f'<td>{_m(r["value"])}</td><td>{_signed_money(r["unrl"])}</td>'
-                 f'<td style="color:var(--{T.tone(r["unrl_pct"])})">{T.pct(r["unrl_pct"], 1)}</td><td>{T.pct(r["weight"], 1, False)}</td></tr>')
-    body += (f'<tr class="sub"><td>Cash</td><td></td><td></td><td></td><td></td><td></td><td></td><td>{_m(cash)}</td>'
-             f'<td></td><td></td><td>{T.pct(cash / nav if nav else None, 1, False)}</td></tr>')
-    body += (f'<tr class="hl"><td>Total</td><td></td><td></td><td>{T.pct(daily / prev_nav if prev_nav else None, 2)}</td>'
-             f'<td>{_signed_money(daily)}</td><td></td><td>{_m(basis)}</td><td>{_m(nav)}</td>'
-             f'<td>{_signed_money(unrl)}</td><td>{T.pct(unrl / basis if basis else None, 1)}</td><td>100.0%</td></tr>')
-    click(f'<div class="amb-wrap"><table class="amb-table pnl"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>',
-          "pnl_tbl")
-    T.show('<div class="amb-swipe">Swipe the table sideways for P&amp;L and weights →</div>')
-    T.show('<div class="amb-note">Daily P&amp;L = shares × today\'s change. Unrealized P&amp;L = market value − cost basis. '
-           'Click a ticker to open its analysis.</div>')
+    for r in lots.sort_values("value", ascending=False).itertuples():
+        body += (f'<tr><td><span{T.go_attr("t:" + r.sym)} style="cursor:pointer"><b style="color:var(--text)">{T.esc(r.sym)}</b>'
+                 f'<span class="amb-sub-name">{T.esc(name_of(r.sym)[:24])}</span></span></td>'
+                 f'<td>{T.esc(r.date)}</td><td>{r.shares:,.4g}</td><td>{_m(r.buy)}</td><td>{_m(r.last)}</td>'
+                 f'<td style="color:var(--{T.tone(r.chg)})">{T.pct(r.chg, 2)}</td><td>{_m(r.value)}</td>'
+                 f'<td>{_signed_money(r.pnl)}</td><td style="color:var(--{T.tone(r.ret)})">{T.pct(r.ret, 1)}</td>'
+                 f'<td>{T.pct(r.spy, 1)}</td><td style="color:var(--{T.tone(r.excess)})">{T.pct(r.excess, 1)}</td>'
+                 f'<td><span class="amb-x"{T.go_attr(f"rm:{r.i}")} title="Remove this purchase">✕</span></td></tr>')
+    body += (f'<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td>'
+             f'<td>{T.pct(daily / prev_nav if prev_nav else None, 2)}</td><td>{_m(nav)}</td><td>{_signed_money(pnl)}</td>'
+             f'<td>{T.pct(pnl / cost if cost else None, 1)}</td><td></td><td></td><td></td></tr>')
+    hit = T.clickable(f'<div class="amb-wrap"><table class="amb-table pnl"><thead><tr>{head}</tr></thead><tbody>{body}</tbody>'
+                      f'</table></div>', "pnl_tbl")
+    if hit and hit.startswith("rm:"):
+        i = int(hit[3:])
+        state.set_portfolio({"cash": 0.0, "positions": [p for j, p in enumerate(pos) if j != i]})
+        st.rerun()
+    elif hit:
+        from views.common import route
+        route(hit)
+    T.show('<div class="amb-swipe">Swipe the table sideways for P&amp;L and the S&amp;P comparison →</div>')
+    T.show('<div class="amb-note">Buy price = the closing price on the day you bought (the previous trading day\'s close for a '
+           'weekend or holiday). "S&amp;P same period" is SPY from that same close to today, so "vs S&amp;P" tells you whether '
+           'the purchase beat simply buying the index. ✕ removes a purchase.</div>')
 
-    # ---- performance + allocation
+    # ---- charts
     a, b = st.columns([1.5, 1], gap="large")
     with a:
         T.section("Performance vs the S&P 500", "time-weighted, since the first purchase")
         if len(twr) > 1:
             fig = go.Figure()
             fig.add_scatter(x=twr.index, y=twr.values * 100, name="Portfolio", mode="lines", line=dict(color=T.C["acc"], width=2.2))
-            if spy_ret is not None:
+            if spy_cum is not None:
                 fig.add_scatter(x=spy_cum.index, y=spy_cum.values * 100, name="S&P 500 (SPY)", mode="lines",
                                 line=dict(color=T.C["text2"], width=1.4, dash="dot"))
             fig.update_yaxes(ticksuffix="%")
             T.plot(fig, 300)
-            T.show('<div class="amb-note">Time-weighted return treats each purchase as new money, so adding positions does not '
-                   'count as performance and the line can be compared with the index. Uses daily closes.</div>')
         else:
-            T.show('<div class="amb-empty">Price history isn\'t available right now (free plan limit). Refresh in a minute.</div>')
+            T.show('<div class="amb-empty">The performance line appears from the day after your first purchase.</div>')
     with b:
-        T.section("Allocation", "% of net liquidation value")
-        al = g["weight"].dropna().sort_values()
-        labels, vals = list(al.index), list(al.values * 100)
-        if cash > 0:
-            labels, vals = ["Cash"] + labels, [cash / nav * 100] + vals
-        fig = go.Figure(go.Bar(y=labels, x=vals, orientation="h", marker_color=[T.C["us"] if l_ == "Cash" else T.C["acc"] for l_ in labels],
-                               text=[f"{v:.1f}%" for v in vals], textposition="outside", cliponaxis=False,
-                               hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
-        fig.update_xaxes(ticksuffix="%", range=[0, max(vals) * 1.25 if vals else 1])
-        fig.update_layout(hovermode="closest", margin=dict(l=8, r=30, t=10, b=8))
+        T.section("Contribution to P&L", "dollars gained or lost by each stock")
+        contrib = lots.groupby("sym")["pnl"].sum().sort_values()
+        fig = go.Figure(go.Bar(y=list(contrib.index), x=list(contrib.values), orientation="h",
+                               marker_color=[T.C["up"] if v >= 0 else T.C["down"] for v in contrib.values],
+                               text=[("+" if v >= 0 else "-") + f"${abs(v):,.0f}" for v in contrib.values], textposition="outside",
+                               cliponaxis=False, hovertemplate="%{y}: %{x:$,.0f}<extra></extra>"))
+        lo, hi = float(min(contrib.min(), 0)), float(max(contrib.max(), 0))
+        span = (hi - lo) or 1
+        fig.update_xaxes(tickprefix="$", range=[lo - span * (0.35 if lo < 0 else 0.02), hi + span * 0.35])
+        fig.update_layout(hovermode="closest", margin=dict(l=8, r=20, t=10, b=8))
         T.plot(fig, 300)
 
-    # ---- risk of today's holdings
-    have = [s for s in syms if s in closes.columns]
-    if len(have) >= 1 and "SPY" in closes and len(closes) > 120:
-        rets = closes.pct_change().dropna()
-        w = g.loc[have, "value"].astype(float)
-        risk = P.holdings_risk(w, rets[have], rets["SPY"])
-        T.section("Risk of today's holdings", f"today's weights over the last {risk['days']} sessions")
-        T.show(T.kv([
-            ("Beta", f"{risk['beta']:.2f}" if risk["beta"] is not None else "—", "vs S&P 500, daily"),
-            ("Volatility", T.pct(risk["vol"], 1, False), "annualized"),
-            ("1-day VaR 95%", f'<span style="color:var(--down)">−{T.money(risk["var"] * mv, 0)}</span>',
-             f"{T.pct(-risk['var'], 1)} of the stocks, historical"),
-            ("Expected shortfall", f'<span style="color:var(--down)">−{T.money(risk["cvar"] * mv, 0)}</span>',
-             "average loss on the worst 5% of days"),
-            ("Effective positions", f"{risk['effective_n']:.1f}", "1 / sum of squared weights"),
-            ("Largest position", f"{g['weight'].idxmax()} · {T.pct(g['weight'].max(), 0, False)}", "of NAV"),
-        ]))
-    _editor(pf)
+    weights = lots.groupby("sym")["value"].sum()
+    weights = weights / weights.sum()
+    c1, c2 = st.columns([1, 1.5], gap="large")
+    with c1:
+        T.section("Allocation", "% of market value")
+        al = weights.sort_values()
+        fig = go.Figure(go.Bar(y=list(al.index), x=list(al.values * 100), orientation="h", marker_color=T.C["acc"],
+                               text=[f"{v * 100:.1f}%" for v in al.values], textposition="outside", cliponaxis=False,
+                               hovertemplate="%{y}: %{x:.1f}%<extra></extra>"))
+        fig.update_xaxes(ticksuffix="%", range=[0, float(al.max()) * 125])
+        fig.update_layout(hovermode="closest", margin=dict(l=8, r=30, t=10, b=8))
+        T.plot(fig, 260)
+    risk = None
+    with c2:
+        have = [s for s in syms if s in closes.columns]
+        if have and "SPY" in closes and len(closes) > 120:
+            rets = closes.pct_change().dropna()
+            risk = P.holdings_risk(weights[have], rets[have], rets["SPY"])
+            T.section("Risk of today's holdings", f"today's weights over the last {risk['days']} sessions")
+            T.show(T.kv([
+                ("Beta", f"{risk['beta']:.2f}" if risk["beta"] is not None else "—", "vs S&P 500, daily"),
+                ("Volatility", T.pct(risk["vol"], 1, False), "annualized"),
+                ("1-day VaR 95%", f'<span style="color:var(--down)">−{T.money(risk["var"] * nav, 0)}</span>', "historical"),
+                ("Expected shortfall", f'<span style="color:var(--down)">−{T.money(risk["cvar"] * nav, 0)}</span>', "worst 5% of days"),
+                ("Effective positions", f"{risk['effective_n']:.1f}", "1 / sum of squared weights"),
+                ("Largest position", f"{weights.idxmax()} · {weights.max():.0%}", "of market value"),
+            ]))
+
+    # ---- analysis + downloads
+    T.section("Portfolio review", "written from the numbers above")
+    day = dt.date.today().isoformat()
+    key = "pf_review_on"
+    review = None
+    if st.button("Write the review", type="primary", key="pf_review_btn") or st.session_state.get(key):
+        try:
+            with st.spinner("Reviewing the portfolio..."):
+                review = ai.portfolio_review(_facts(lots, nav, twr, spy_ret, risk, weights), day)
+            st.session_state[key] = True
+        except Exception as e:
+            st.info(f"The written review isn't available right now ({e}).")
+    if review:
+        T.show(f'<div class="amb-lead">{T.esc(review.get("headline", ""))}</div>')
+        blocks = [("Performance", review.get("performance")), ("What drove it", review.get("drivers")),
+                  ("Risk", review.get("risk")), ("Diversification", review.get("diversification"))]
+        T.show('<div class="amb-grid g2 stack">' + "".join(
+            f'<div class="amb-take"><div class="h">{k_}</div><p>{T.esc(v_ or "")}</p></div>' for k_, v_ in blocks) + "</div>")
+        st.write("")
+        lists = [("What to watch", review.get("watch")), ("Ideas to consider", review.get("ideas"))]
+        T.show('<div class="amb-grid g2 stack">' + "".join(
+            f'<div class="amb-take"><div class="h">{k_}</div><ul class="amb-ul">{"".join("<li>" + T.esc(str(x)) + "</li>" for x in (v_ or []))}</ul></div>'
+            for k_, v_ in lists) + "</div>")
+        T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>Written by Gemini only from this portfolio\'s numbers. '
+               'Educational, not personalized investment advice.</div>')
+    d1, d2 = st.columns([1, 1], gap="medium")
+    d1.download_button("Download PDF report", _portfolio_pdf(lots, nav, twr, spy_cum, risk, review, day),
+                       file_name=f"portfolio_report_{day}.pdf", mime="application/pdf", width="stretch", key="pf_pdf",
+                       help="Includes the review if you wrote it above.")
+    with d2.popover("Open on another device", width="stretch"):
+        base = (getattr(st.context, "url", None) or "https://alejandro-market-brief.streamlit.app/portfolio").split("?")[0]
+        st.caption("Your positions are saved in this browser. Open this link on your phone (or any computer) to load them there.")
+        st.code(f"{base}?pf={_encode(pf)}", language=None, wrap_lines=True)
+
+    _add_form(pf)
 
 
 # --------------------------------------------------------------------------- research calls
