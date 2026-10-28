@@ -127,8 +127,8 @@ def _calls():
 
 
 # --------------------------------------------------------------------------- portfolio lab
-@st.cache_data(ttl=6 * 3600, show_spinner=False)
 def _closes(symbols: tuple[str, ...]) -> pd.DataFrame:
+    """Daily closes (each history is cached in sources, so a symbol that failed is retried next time)."""
     ser = {}
     for s in symbols + ("SPY",):
         h = src.try_history(s)
@@ -153,6 +153,9 @@ def _portfolio_lab():
     with st.spinner("Loading two years of prices (free plan: 8 requests per minute)..."):
         df = _closes(tuple(picks))
     have = [s for s in picks if s in df.columns]
+    missing = [s for s in picks if s not in have]
+    if missing:
+        st.caption(f"No price history right now for {', '.join(missing)} (free plan limit); they are left out. Refresh in a minute.")
     if "SPY" not in df.columns or len(have) < 2 or len(df) < 120:
         T.show('<div class="amb-empty">Not enough price history right now (Twelve Data limit). Try again in a minute.</div>')
         return
