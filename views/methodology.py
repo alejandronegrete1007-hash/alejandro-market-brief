@@ -15,17 +15,17 @@ SOURCES = [
      "60 calls/min (free)"),
     ("Twelve Data", "Data provider", "Daily price history: charts, YTD base, volatility, beta", "8 calls/min, 800/day (free)"),
     ("Banxico SIE", "Primary source", "USD/MXN FIX, target rate, TIIE, CETES, inflation (INPC)", "Free token, official data"),
-    ("FRED", "Primary source", "US 10-year Treasury yield, Fed funds target", "Free key, personal use"),
-    ("SEC EDGAR", "Primary source", "10-K financials (XBRL company facts) for the DCF", "Free, 10 requests/sec"),
+    ("FRED", "Primary source", "Treasury yield curve (1M to 30Y), Fed funds target", "Free key, personal use"),
+    ("SEC EDGAR", "Primary source", "10-K financials (XBRL company facts): DCF, ratios, EVA", "Free, 10 requests/sec"),
     ("CoinGecko", "Data provider", "Bitcoin price", "Free public endpoint"),
     ("CNBC, MarketWatch, WSJ, Fed, El Financiero, Google News", "News (RSS)", "Headlines and summaries, always linked to the article",
      "Public feeds"),
-    ("Google Gemini", "AI", "Daily brief and the per-stock take, written only from the data above", "Free tier"),
+    ("Google Gemini", "AI", "Daily brief and the research notes, written only from the data above", "Free tier"),
 ]
 
 
 def render():
-    T.show('<div class="amb-hero"><div><div class="amb-kicker">Methodology</div><h1>How the numbers are made</h1>'
+    T.show('<div class="amb-hero"><div><h1>How the numbers are made</h1>'
            '<div class="sub">Every figure is either fetched, calculated from fetched data, or written by the AI from both. '
            'The app labels which is which.</div></div></div>')
 
@@ -57,19 +57,47 @@ formula for every ADR, with prices in dollars, so it reflects both the stock and
 **Statistical ranges.** price × e^(±z·σ·√(days/252)) with z = 1 (≈68%) and 1.96 (≈95%), zero drift. They describe how
 far the stock usually moves, not where it is going.
 
-**DCF: four valuations.** A 5-year model driven by revenue. Revenue grows at the chosen rate; the EBITDA margin moves
-in a straight line from last year's level to your year-5 target; D&A and capex are a % of revenue; working capital absorbs a
-% of each year's new revenue; taxes apply to EBIT.
+**Cost of capital.** Cost of equity by CAPM: 10-year Treasury + adjusted beta × equity risk premium (default 5%; the
+course guides cite 4.45% from Damodaran and 4.5–5.5% from valuation surveys; a Mexican company valued in dollars adds about
+2.8–3.1% of country risk). Adjusted beta = 0.67 × measured beta + 0.33 (Blume). Cost of debt = interest expense / debt,
+after tax. WACC weights equity and debt at market value.
 
-- **Unlevered (FCFF at WACC):** FCFF = EBIT × (1 − tax) + D&A − capex − Δ working capital. Discounted at the WACC
-  (cost of equity from CAPM and after-tax cost of debt, weighted by market value). Enterprise value − net debt = equity.
+**DCF: four valuations.** A 5-year model driven by revenue. Revenue grows at the chosen rate (default: 5-year CAGR, capped
+at 15%); the EBITDA margin moves in a straight line from last year's level to your year-5 target (default: the company's own
+5-year average, because peak and trough margins revert); D&A and capex are a % of revenue; working capital absorbs
+(receivables + inventory − payables) / revenue of each year's new revenue, from the last 10-K; taxes apply to EBIT.
+
+- **Unlevered (FCFF at WACC):** FCFF = EBIT × (1 − tax) + D&A − capex − Δ working capital. Enterprise value − net debt = equity.
 - **Levered (FCFE at cost of equity):** FCFE = FCFF − interest × (1 − tax) + net new borrowing (debt grows with revenue).
-  Discounted at the cost of equity; cash on hand is added.
-- **Terminal value:** either *perpetual growth* (the last year's cash flow grows forever at g) or an *EV/EBITDA exit
-  multiple* (the business is sold at year 5). The app shows what each implies about the other as a sanity check.
-- **Intrinsic value** is the average of the four. *Undervalued* / *Overvalued* = more than 10% above / below the price.
+  Cash on hand is added.
+- **Terminal value:** *perpetual growth* values a normalized year 6 (revenue, working capital and borrowing grow at the
+  perpetual rate; capex settles at no more than 15% above D&A) as a growing perpetuity, or an *EV/EBITDA exit multiple*
+  sells the business at year 5 (default multiple: the median of Finnhub's peer group). Each implies the other as a check.
+- **Scenarios:** bear and bull move growth ±5 pts, the year-5 margin ±15%, the exit multiple ±20% and discount rates ∓1 pt.
+  Intrinsic value is the probability-weighted average (25 / 50 / 25 by default) of each scenario's four-method average.
+  *Undervalued* / *Overvalued* = more than 10% above / below the price.
+- **Peers' multiples:** the peers' 25th–75th percentile P/E, P/S and EV/EBITDA applied to this company, in the football field.
 
 **Reverse DCF.** Solves for the 5-year growth rate that makes the unlevered perpetuity value equal today's price.
+
+**Financial statement analysis.** From the 10-K: horizontal analysis (growth year over year), vertical analysis (each line
+as % of revenue), liquidity (current and quick ratios), leverage (debt / equity, net debt / EBITDA, interest coverage),
+activity (asset turnover, days sales outstanding, days inventory), profitability (ROA, ROE on average balances) and the
+DuPont split ROE = net margin × asset turnover × equity multiplier. Earnings-quality checks flag operating cash flow below
+net income, receivables growing faster than sales and thin interest coverage.
+
+**Economic value added.** EVA = NOPAT − WACC × capital employed, with NOPAT = EBIT × (1 − tax) and capital employed =
+interest-bearing debt + equity (total assets minus non-interest-bearing current liabilities), averaged over the year.
+Positive EVA means the return on capital beats its cost.
+
+**Tail risk.** Historical 1-day Value at Risk (the loss not exceeded on 95% or 99% of days) and expected shortfall (the
+average loss beyond it) from two years of real daily returns, compared with what a normal distribution would say, plus
+skewness and excess kurtosis. Real returns have fatter tails than the bell curve.
+
+**Portfolio lab.** Markowitz mean-variance optimization, long-only and fully invested, with a cap per stock. Expected
+returns from CAPM; risk from the covariance of two years of weekly returns, shrunk with Ledoit-Wolf (2004) toward a
+constant-variance target. Shows the efficient frontier, the minimum-variance and maximum-Sharpe portfolios and the
+capital market line.
 
 **Outlook (price simulation).** 4,000 six-month paths. Each simulated day replays a randomly chosen real daily move
 from the last two years (a bootstrap), re-centred to the drift you pick: neutral (0%), market average (+8% a year) or the
@@ -86,8 +114,10 @@ multiple, or higher growth, margin, return or analyst score).
 **Analyst consensus.** Monthly buy / hold / sell counts from the analysts covering the stock (Finnhub recommendation
 trends). Score: strong buy = 5 … strong sell = 1.
 
-**Model lean (Buy / Hold / Sell).** Gemini weighs the DCF with your assumptions, momentum, risk and the consensus, and
-must say what would change its mind. It is a starting point for your own research, not advice.
+**Research note.** Gemini writes the thesis, scenarios, risks, catalysts and a Buy / Hold / Sell lean only from the
+numbers of every tab (valuation with your assumptions, financial analysis, EVA, risk, comparison and consensus), and must
+say what would change its mind. The call is yours: you can save it, and the Watchlist tracks its return against the S&P 500
+from that day (price and S&P 500 level are recorded when you save). The note downloads as a printable page.
 
 **DCF for Mexican ADRs.** Not automatic: they file a 20-F in IFRS and pesos, and one ADR equals several local shares.
 Their multiples (Finnhub) are still shown.

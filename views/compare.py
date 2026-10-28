@@ -13,7 +13,7 @@ import state
 import theme as T
 from views.common import name_of
 
-LINE = [T.C["gold"], T.C["us"], T.C["mx"], "#C792EA", "#FF9E64", T.C["text2"]]
+LINE = T.SERIES
 WINDOWS = ["YTD", "6M", "1Y", "2Y"]
 
 

@@ -1,14 +1,14 @@
 [theme]
 base = "dark"
-primaryColor = "#E8B04B"
-backgroundColor = "#07090D"
-secondaryBackgroundColor = "#131922"
-textColor = "#E9EEF4"
-borderColor = "#1E2632"
-baseRadius = "10px"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-headingFont = "'Space Grotesk':https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
-codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+primaryColor = "#7FA7FF"
+backgroundColor = "#121417"
+secondaryBackgroundColor = "#1A1D22"
+textColor = "#E4E6EA"
+borderColor = "#2A2E35"
+baseRadius = "6px"
+font = "'Inter Tight':https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap"
+headingFont = "Spectral:https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600&display=swap"
+codeFont = "'Inter Tight':https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap"
 
 [client]
 toolbarMode = "minimal"

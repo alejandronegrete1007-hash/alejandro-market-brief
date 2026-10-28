@@ -4,3 +4,4 @@ numpy==2.5.3
 plotly==7.1.0
 requests==2.34.2
 feedparser==6.0.14
+scipy==1.18.1

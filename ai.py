@@ -165,13 +165,15 @@ or EWW. "direction" is the likely first reaction implied by the news, not a fore
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner=False, max_entries=30)
-def stock_take(symbol: str, facts: str, news: tuple[str, ...], day: str) -> dict:
+def research_note(symbol: str, facts: str, news: tuple[str, ...], day: str) -> dict:
+    """An equity research note built only from the app's data: thesis, valuation, quality, scenarios, risks."""
     numbered = "\n".join(f"[{i}] {h}" for i, h in enumerate(news)) or "(no recent company news)"
     prompt = f"""{STYLE}
 
-Give your take on {symbol} for an investor deciding whether to dig deeper.
+Write a one-page equity research note on {symbol}, the way a buy-side analyst at an asset manager
+would present it to the investment committee. Today is {day}.
 
-DATA AND CALCULATIONS FROM THE APP (treat as facts):
+DATA AND CALCULATIONS FROM THE APP (treat as facts; the DCF uses the analyst's own assumptions):
 {facts}
 
 RECENT NEWS:
@@ -179,24 +181,25 @@ RECENT NEWS:
 
 Return JSON exactly like:
 {{
-  "situation": "2-3 sentences: what is going on with the stock now",
-  "momentum": "1-2 sentences on the price trend and volatility, citing the numbers given",
-  "valuation": "1-2 sentences on what the multiples and the DCF (if given) imply",
-  "bull": "the bull case and the assumption it needs",
-  "base": "the base case and its assumption",
-  "bear": "the bear case and what would trigger it",
-  "risks": ["3 short risks"],
-  "catalysts": ["up to 3 upcoming events; only ones supported by the inputs, e.g. the earnings date"],
-  "unknowns": ["1-2 things the data can't tell us"],
+  "one_liner": "the thesis in one sentence, max 30 words",
+  "thesis": ["3 numbered-style points, each 1-2 sentences, each tied to a number from the data"],
+  "variant": "1-2 sentences: where this view differs from the Wall Street consensus given, or why it agrees",
+  "valuation": "2-3 sentences: probability-weighted DCF vs price, what the price implies (reverse DCF), and the peers' multiples",
+  "quality": "1-2 sentences on financial health: margins, cash conversion, leverage, ROIC vs WACC / EVA, citing the numbers",
+  "bull": "bull case: what has to go right, and the value it points to",
+  "base": "base case and its assumption",
+  "bear": "bear case: what would go wrong, and the value it points to",
+  "catalysts": ["up to 3 upcoming events supported by the inputs (e.g. the earnings date)"],
+  "risks": ["3 short risks, most important first"],
+  "monitor": ["2-3 metrics to track that would confirm or break the thesis"],
   "lean": "Buy" | "Hold" | "Sell",
   "conviction": "Low" | "Medium" | "High",
-  "lean_why": "2-3 sentences: why that lean, weighing the DCF, momentum, risk and the analyst consensus given",
+  "lean_why": "2-3 sentences: why that lean, weighing valuation, quality, momentum, risk and the consensus",
   "changes_mind": "one sentence: what would flip the lean",
-  "vs_consensus": "one sentence comparing your lean with the analyst consensus given (agree/disagree and why)",
   "bottom_line": "one sentence"
 }}
-The "lean" is a model opinion for an investor's own research, built only from the inputs. If the data is too thin
-or contradictory, choose "Hold" with "Low" conviction and say why."""
+Never invent numbers, events, price targets or dates. The lean is a model opinion for the analyst's own research;
+if the data is thin or contradictory, choose "Hold" with "Low" conviction and say why."""
     return _generate(prompt, temperature=0.35)
 
 

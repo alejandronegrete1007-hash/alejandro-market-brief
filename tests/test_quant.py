@@ -120,3 +120,15 @@ def test_simulation_zero_drift_is_centred_on_today():
     f = Q.fan(paths)
     assert (f[5] <= f[50]).all() and (f[50] <= f[95]).all()
     assert Q.prob_touch(paths, c.iloc[-1] * 0.01, above=False) == 0.0
+
+
+def test_tail_risk_on_fat_tailed_returns():
+    import numpy as np
+    import pandas as pd
+    rng = np.random.default_rng(1)
+    r = rng.standard_t(3, 600) * 0.01
+    close = pd.Series(100 * np.exp(np.cumsum(r)), index=pd.bdate_range("2024-01-01", periods=600))
+    t = Q.tail_risk(close)
+    assert t["cvar"] > t["var"] > 0
+    assert t["kurt"] > 1  # fat tails
+    assert t["days"] == 504

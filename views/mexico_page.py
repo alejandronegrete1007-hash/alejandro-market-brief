@@ -18,7 +18,7 @@ def _safe(fn, *a):
 
 
 def render():
-    T.show('<div class="amb-hero"><div><div class="amb-eyebrow">México</div><h1>Peso, rates &amp; Mexican stocks</h1>'
+    T.show('<div class="amb-hero"><div><h1>Peso, rates &amp; Mexican stocks</h1>'
            '<div class="sub">Official Banxico data and the Mexican companies that trade in New York.</div></div></div>')
 
     bx = _safe(mexico.indicators) or {}
@@ -57,7 +57,7 @@ def render():
         if fix is not None:
             f = fix.iloc[-260:]
             fig = go.Figure(go.Scatter(x=f.index, y=f.values, mode="lines", line=dict(color=T.C["mx"], width=2),
-                                       fill="tozeroy", fillcolor="rgba(46,197,161,.07)", name="FIX"))
+                                       fill="tozeroy", fillcolor=T.rgba("mx", .07), name="FIX"))
             fig.update_yaxes(range=[f.min() * 0.985, f.max() * 1.015])
             T.plot(fig, 300, "Pesos per dollar, last 12 months")
             T.show('<div class="amb-note">Up means a weaker peso. Banxico FIX rate (series SF43718).</div>')
@@ -76,7 +76,7 @@ def render():
         inf = _safe(mexico.series_history, "inflation", 4)
         if inf is not None:
             fig = go.Figure()
-            fig.add_hrect(y0=2, y1=4, fillcolor="rgba(232,176,75,.07)", line_width=0)
+            fig.add_hrect(y0=2, y1=4, fillcolor=T.rgba("acc", .07), line_width=0)
             fig.add_hline(y=3, line=dict(color=T.C["gold"], dash="dot", width=1))
             fig.add_bar(x=inf.index, y=inf.values, marker_color=[T.C["down"] if v > 4 else T.C["mx"] for v in inf.values])
             fig.update_yaxes(range=[max(0, inf.min() - 1), inf.max() + 0.6], ticksuffix="%")

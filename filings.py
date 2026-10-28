@@ -24,6 +24,7 @@ TAGS = {
              "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "st_investments": ["MarketableSecuritiesCurrent", "ShortTermInvestments",
                        "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+    "lt_investments": ["MarketableSecuritiesNoncurrent", "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"],
     "debt_total": ["LongTermDebt"],
     "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
     "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
@@ -51,11 +52,12 @@ BALANCE = {
     "equity": ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "receivables": ["AccountsReceivableNetCurrent", "ReceivablesNetCurrent"],
     "inventory": ["InventoryNet"],
-    "payables": ["AccountsPayableCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"],
+    "payables": ["AccountsPayableCurrent", "AccountsPayableTradeCurrent", "AccountsPayableAndAccruedLiabilitiesCurrent"],
     "cash": ["CashAndCashEquivalentsAtCarryingValue",
              "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "st_investments": ["MarketableSecuritiesCurrent", "ShortTermInvestments",
                        "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+    "lt_investments": ["MarketableSecuritiesNoncurrent", "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"],
     "debt_total": ["LongTermDebt"],
     "debt_noncurrent": ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"],
     "debt_current": ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
@@ -115,11 +117,11 @@ def _at(series: pd.Series, dates: pd.DatetimeIndex) -> pd.Series:
 def balance_history(facts: dict, dates: pd.DatetimeIndex) -> pd.DataFrame:
     """One row per fiscal year-end with the balance-sheet items the ratios need."""
     df = pd.DataFrame({k: _at(annual_instant(facts, tags), dates) for k, tags in BALANCE.items()}, index=dates)
-    total = df["debt_total"]
+    # Some filers tag only their notes as LongTermDebt and report finance leases inside the
+    # current / non-current lines (Micron), so take whichever total is larger.
     parts = df["debt_noncurrent"].fillna(0) + df["debt_current"].fillna(0)
-    df["debt"] = total.where(total.notna(), parts.where(df["debt_noncurrent"].notna() | df["debt_current"].notna()))
-    df["debt"] = df["debt"].fillna(0) + df["short_borrowings"].fillna(0)
-    df["cash_all"] = df["cash"].fillna(0) + df["st_investments"].fillna(0)
+    df["debt"] = pd.concat([df["debt_total"].fillna(0), parts], axis=1).max(axis=1) + df["short_borrowings"].fillna(0)
+    df["cash_all"] = df["cash"].fillna(0) + df["st_investments"].fillna(0) + df["lt_investments"].fillna(0)
     return df
 
 
@@ -168,13 +170,18 @@ def build(facts: dict) -> dict:
     cash = latest(facts, TAGS["cash"])
     ref = cash["end"] if cash else None
     sti = _recent(latest(facts, TAGS["st_investments"]), ref)
+    lti = _recent(latest(facts, TAGS["lt_investments"]), ref)
     total = _recent(latest(facts, TAGS["debt_total"]), ref)
-    parts = [total] if total else [d for d in (_recent(latest(facts, TAGS["debt_noncurrent"]), ref),
-                                               _recent(latest(facts, TAGS["debt_current"]), ref)) if d]
+    split = [d for d in (_recent(latest(facts, TAGS["debt_noncurrent"]), ref),
+                         _recent(latest(facts, TAGS["debt_current"]), ref)) if d]
+    # Take the larger of the tagged total and current + non-current (some filers tag only notes as the total).
+    parts = split if sum(d["val"] for d in split) > (total["val"] if total else 0) else ([total] if total else [])
     sb = _recent(latest(facts, TAGS["short_borrowings"]), ref)
     if sb:
         parts.append(sb)
-    cash_total = (cash["val"] if cash else 0.0) + (sti["val"] if sti else 0.0)
+    cash_total = sum(x["val"] for x in (cash, sti, lti) if x)
+    if lti:
+        notes.append(f"Cash includes {lti['val'] / 1e9:,.1f}B of long-term marketable securities (liquid bonds).")
     debt = sum(p["val"] for p in parts)
     if not cash:
         notes.append("Cash not found; assumed zero.")
@@ -209,6 +216,8 @@ def build(facts: dict) -> dict:
     if not bal.empty:
         lastb = bal.iloc[-1]
         if pd.notna(lastb.get("receivables")) or pd.notna(lastb.get("inventory")):
+            if pd.isna(lastb.get("payables")):
+                notes.append("Accounts payable not tagged, so working capital may be overstated.")
             nwc = (0 if pd.isna(lastb["receivables"]) else lastb["receivables"]) + \
                   (0 if pd.isna(lastb["inventory"]) else lastb["inventory"]) - \
                   (0 if pd.isna(lastb["payables"]) else lastb["payables"])

@@ -78,17 +78,31 @@ def project(a: Inputs) -> pd.DataFrame:
     return pd.DataFrame(rows).set_index("year")
 
 
+def steady_capex(a: Inputs) -> float:
+    """Capex in the perpetuity year, % of revenue. A business growing at 2-3% a year only needs to
+    replace what wears out plus a little, so capex is held to at most 15% above D&A (never below D&A).
+    Without this, a company in a heavy build-out (capex far above D&A) would keep that spending forever."""
+    return max(a.da_pct, min(a.capex_pct, a.da_pct * 1.15))
+
+
 def terminal_year(a: Inputs, last: pd.Series, tg: float | None = None) -> dict:
     """Year 6, normalized: everything grows at the perpetual rate, so working capital and new
-    borrowing reflect steady-state growth instead of the faster growth of years 1-5."""
+    borrowing reflect steady-state growth instead of the faster growth of years 1-5, and capex
+    settles near D&A (see steady_capex)."""
     tg = a.tg if tg is None else tg
     rev = last["revenue"] * (1 + tg)
     ebitda = rev * a.margin_target
     da = rev * a.da_pct
     ebit = ebitda - da
-    fcff = ebit - max(ebit, 0) * a.tax + da - rev * a.capex_pct - (rev - last["revenue"]) * a.nwc_pct
-    fcfe = fcff - last["debt"] * a.kd * (1 - a.tax) + last["debt"] * tg
-    return {"revenue": rev, "ebitda": ebitda, "fcff": fcff, "fcfe": fcfe}
+    taxes = max(ebit, 0) * a.tax
+    capex = rev * steady_capex(a)
+    dnwc = (rev - last["revenue"]) * a.nwc_pct
+    fcff = ebit - taxes + da - capex - dnwc
+    interest = last["debt"] * a.kd
+    net_borrow = last["debt"] * tg
+    fcfe = fcff - interest * (1 - a.tax) + net_borrow
+    return {"revenue": rev, "ebitda": ebitda, "da": da, "ebit": ebit, "taxes": taxes, "capex": capex, "dnwc": dnwc,
+            "fcff": fcff, "interest": interest, "net_borrow": net_borrow, "fcfe": fcfe}
 
 
 def value(a: Inputs) -> dict:

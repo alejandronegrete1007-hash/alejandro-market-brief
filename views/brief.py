@@ -92,6 +92,8 @@ def render():
                '(SPY, QQQ, DIA, IWM), whose daily % move is almost identical. The bar shows where the price sits between '
                "today's low and high. <b>Close</b> means the market is shut and you see the last trade of the day.</div>")
 
+        _rates_and_sectors()
+
         # ---------------- Mexico
         T.section("México", "Banxico · NYSE-listed Mexican stocks", "Mexico")
         tiles = []
@@ -157,6 +159,64 @@ def render():
     with brief_slot:
         _brief(quotes, eww, btc, t10, bx, fix)
     T.footer("Not investment advice · Finnhub, Twelve Data, FRED, Banxico, SEC, CoinGecko")
+
+
+CURVE = [("1M", "DGS1MO"), ("3M", "DGS3MO"), ("6M", "DGS6MO"), ("1Y", "DGS1"), ("2Y", "DGS2"), ("5Y", "DGS5"),
+         ("10Y", "DGS10"), ("30Y", "DGS30")]
+SECTORS = [("Technology", "XLK"), ("Financials", "XLF"), ("Health care", "XLV"), ("Consumer discretionary", "XLY"),
+           ("Communication", "XLC"), ("Industrials", "XLI"), ("Consumer staples", "XLP"), ("Energy", "XLE"),
+           ("Utilities", "XLU"), ("Real estate", "XLRE"), ("Materials", "XLB")]
+
+
+def _rates_and_sectors():
+    import plotly.graph_objects as go
+    a, b = st.columns(2, gap="large")
+    with a:
+        T.section("Treasury yield curve", "FRED · today vs a month ago")
+        now, ago = [], []
+        for lbl, sid in CURVE:
+            s_ = _safe(src.fred, sid)
+            if s_ is None or s_.empty:
+                continue
+            past = s_[s_.index <= s_.index[-1] - dt.timedelta(days=30)]
+            now.append((lbl, float(s_.iloc[-1])))
+            ago.append((lbl, float(past.iloc[-1]) if len(past) else None))
+        if len(now) >= 4:
+            fig = go.Figure()
+            fig.add_scatter(x=[x for x, _ in ago], y=[y for _, y in ago], name="A month ago", mode="lines",
+                            line=dict(color=T.C["muted"], width=1.4, dash="dot"))
+            fig.add_scatter(x=[x for x, _ in now], y=[y for _, y in now], name="Today", mode="lines+markers",
+                            line=dict(color=T.C["acc"], width=2.2))
+            fig.update_yaxes(ticksuffix="%")
+            T.plot(fig, 260)
+            d = dict(now)
+            notes = []
+            if "10Y" in d and "2Y" in d:
+                notes.append(f"10Y − 2Y {(d['10Y'] - d['2Y']) * 100:+.0f} bps")
+            if "10Y" in d and "3M" in d:
+                notes.append(f"10Y − 3M {(d['10Y'] - d['3M']) * 100:+.0f} bps")
+            T.show(f'<div class="amb-note">{" · ".join(notes)}. A negative spread (an inverted curve) has come before most US '
+                   'recessions; a steepening curve usually means the market expects rate cuts or more inflation.</div>')
+        else:
+            T.show('<div class="amb-empty">Treasury yields unavailable right now.</div>')
+    with b:
+        T.section("Sectors today", "SPDR sector ETFs · % change")
+        rows = [(nm, sym, src.try_quote(sym)) for nm, sym in SECTORS]
+        rows = sorted([(nm, sym, q["pct"]) for nm, sym, q in rows if q], key=lambda r: r[2])
+        if rows:
+            fig = go.Figure(go.Bar(y=[f"{nm} · {sym}" for nm, sym, _ in rows], x=[p for _, _, p in rows], orientation="h",
+                                   marker_color=[T.C["up"] if p >= 0 else T.C["down"] for _, _, p in rows],
+                                   text=[f"{p:+.2f}%" for _, _, p in rows], textposition="outside", cliponaxis=False,
+                                   hovertemplate="%{y}: %{x:+.2f}%<extra></extra>"))
+            lo, hi = min(p for _, _, p in rows), max(p for _, _, p in rows)
+            span = max(hi - min(lo, 0), 0.5)
+            fig.update_xaxes(ticksuffix="%", zeroline=True, zerolinecolor=T.C["line2"],
+                             range=[min(lo, 0) - span * 0.35, max(hi, 0) + span * 0.3])
+            fig.update_layout(hovermode="closest", margin=dict(l=8, r=40, t=10, b=8))
+            fig.update_yaxes(tickfont=dict(color=T.C["text2"]))
+            T.plot(fig, 300)
+        else:
+            T.show('<div class="amb-empty">Sector quotes unavailable right now.</div>')
 
 
 def _snapshot(quotes, eww, btc, t10, bx, fix) -> str:

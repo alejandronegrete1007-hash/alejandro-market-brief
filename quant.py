@@ -78,6 +78,25 @@ def beta(stock: pd.Series, bench: pd.Series, years: int = 2) -> float | None:
     return float(w["s"].cov(w["b"]) / w["b"].var())
 
 
+def tail_risk(close: pd.Series, window: int = 504, level: float = 0.95) -> dict | None:
+    """Historical 1-day Value at Risk and Expected Shortfall (CVaR) from real daily returns, plus the
+    shape of the distribution. Historical VaR keeps the fat tails a normal model misses."""
+    r = close.dropna().pct_change().dropna().iloc[-window:]
+    if len(r) < 120:
+        return None
+    q = float(np.quantile(r, 1 - level))
+    sd = float(r.std(ddof=1))
+    z = {0.95: 1.6449, 0.99: 2.3263}.get(level, 1.6449)
+    return {
+        "var": -q,                                  # loss not exceeded on `level` of days
+        "cvar": -float(r[r <= q].mean()),           # average loss on the worst (1 - level) of days
+        "var_normal": z * sd - float(r.mean()),     # what a normal model would say
+        "skew": float(r.skew()), "kurt": float(r.kurt()),  # pandas kurt() is excess kurtosis
+        "worst": float(r.min()), "best": float(r.max()), "days": int(len(r)),
+        "beyond3sd": int((r.abs() > 3 * sd).sum()), "expected3sd": float(len(r) * 0.0027),
+    }
+
+
 def sharpe(close: pd.Series, rf: float, window: int = TRADING_DAYS) -> float | None:
     s = close.dropna().iloc[-(window + 1):]
     vol = annual_volatility(s, window)

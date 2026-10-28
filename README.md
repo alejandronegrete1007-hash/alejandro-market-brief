@@ -9,23 +9,30 @@ Every morning it answers three questions in about five minutes: what moved, why,
 
 | Page | What you get |
 |---|---|
-| **Today** | Clickable cards for US indices (via ETFs), gold, oil, Bitcoin, the 10Y yield, the peso (Banxico FIX), Banxico's rate, inflation, CETES, TIIE and the real policy rate. An AI brief where every story lists **the markets and tickers it moves** (▲ ▼ ◆), each ticker one click from its analysis, and links to its sources |
+| **Today** | Clickable cards for US indices (via ETFs), gold, oil, Bitcoin, the 10Y yield, the **Treasury yield curve** (with 10Y−2Y and 10Y−3M spreads), **sector performance**, the peso (Banxico FIX), Banxico's rate, inflation, CETES, TIIE and the real policy rate. An AI brief where every story lists **the markets and tickers it moves** (▲ ▼ ◆), each ticker one click from its analysis, and links to its sources |
 | **México** | Banxico charts (USD/MXN, Banxico vs Fed, inflation vs the 3% ± 1 target) and a live **YTD ranking of Mexican companies listed in New York** |
-| **Watchlist** | S&P 500 leaders of 2026 and the live Mexico top 5 (both fixed), plus **My stocks**: any tickers you add, saved in the browser |
-| **Analysis** | Chart with 50/200-day averages, risk metrics and statistical ranges; a **DCF valued four ways** (levered and unlevered, perpetuity and exit multiple) with market vs intrinsic value, reverse DCF, 5-year projection, sensitivity tables and a football field; an **Outlook** fan from 4,000 bootstrap-simulated paths with odds and key levels; a **Compare** tab vs the market (alpha, beta, capture), the sector ETF (return decomposition) and a peer comps table; **Wall Street consensus**; and an AI **Buy / Hold / Sell lean** with bull/base/bear cases |
+| **Watchlist** | S&P 500 leaders of 2026 and the live Mexico top 5 (both fixed), **My stocks** saved in the browser, the **track record of my research calls** vs the S&P 500, and a **portfolio lab** (Markowitz efficient frontier, CAPM expected returns, Ledoit-Wolf covariance) |
+| **Analysis** | Seven tabs for any US-listed stock: **Chart & risk** (moving averages, drawdown, historical VaR / expected shortfall vs a normal model, skew and kurtosis) · **Valuation** (cost of capital built step by step, a DCF valued four ways, bear/base/bull scenarios with probabilities, peers' multiples, football field, sensitivity) · **Financials** (horizontal and vertical analysis, liquidity, leverage, activity and profitability ratios, DuPont, earnings-quality checks, **EVA** and ROIC vs WACC) · **Outlook** (4,000 bootstrap-simulated paths) · **Compare** (vs market, sector and competitors) · **Research note** (Wall Street consensus plus a one-page note: thesis, valuation, quality, scenarios, catalysts, risks; save your Buy / Hold / Sell call or download the note) · **News** |
 | **Methodology** | Every formula and source, plus a live data-health check |
 
 ## Valuation approach
 
+- **Cost of capital**: CAPM with the 10-year Treasury, Blume-adjusted beta and an adjustable equity risk premium
+  (default 5%; 4.45% Damodaran, 4.5–5.5% surveys); cost of debt from interest expense / debt; market-value weights.
 - **Drivers** (all adjustable): tax rate, revenue/earnings growth (years 1–5), WACC, cost of equity, perpetual growth,
   EV/EBITDA exit multiple, year-5 EBITDA margin, capex and D&A as % of revenue, working capital per dollar of new revenue.
-  Defaults come from the latest 10-K (SEC XBRL) and market data.
-- **Unlevered DCF**: FCFF = EBIT(1−t) + D&A − capex − ΔNWC, discounted at WACC (CAPM cost of equity + after-tax cost of debt,
-  market-value weights); EV − net debt = equity.
+  Defaults come from the latest 10-K (SEC XBRL), the peer group and market data: growth = 5-year CAGR capped at 15%,
+  year-5 margin = the company's 5-year average (mean reversion), exit multiple = peer median EV/EBITDA,
+  working capital = (receivables + inventory − payables) / revenue.
+- **Unlevered DCF**: FCFF = EBIT(1−t) + D&A − capex − ΔNWC, discounted at WACC; EV − net debt = equity.
 - **Levered DCF**: FCFE = FCFF − interest(1−t) + net borrowing, discounted at the cost of equity.
-- **Terminal value**: Gordon growth or EV/EBITDA exit, each cross-checked against the other (implied multiple / implied growth).
+- **Terminal value**: Gordon growth on a **normalized year 6** (working capital and borrowing at the perpetual rate, capex
+  settling near D&A) or an EV/EBITDA exit, each cross-checked against the other (implied multiple / implied growth).
+- **Scenarios**: bear / base / bull with editable probabilities; intrinsic value is the probability-weighted average.
 - **Reverse DCF** solves for the growth the current price implies.
 - Mexican ADRs file 20-Fs in IFRS and pesos, with ADR ratios, so the automatic DCF covers US filers; ADRs get multiples and consensus.
+- The SEC extraction is checked against filed numbers in CI (`scripts/check_filings.py`); e.g. Micron FY2026: revenue
+  $133.19B, EBITDA $108.8B, total debt $5.18B, matching the 10-K.
 
 ## Being honest about the data
 
@@ -35,8 +42,9 @@ Every morning it answers three questions in about five minutes: what moved, why,
 
 ## Stack
 
-Python · Streamlit · pandas · NumPy · Plotly · Finnhub · Twelve Data · FRED · Banxico SIE · SEC EDGAR · CoinGecko · Gemini · RSS.
-Hosting and every data source run on free tiers.
+Python · Streamlit · pandas · NumPy · SciPy · Plotly · Finnhub · Twelve Data · FRED · Banxico SIE · SEC EDGAR · CoinGecko · Gemini · RSS.
+Hosting and every data source run on free tiers. A GitHub Actions job visits every page every two hours
+(6:00–24:00 Mexico City) with a headless browser, so the app is awake and its data cached when someone opens it.
 
 ## Run it locally
 
@@ -44,7 +52,7 @@ Hosting and every data source run on free tiers.
 pip install -r requirements.txt
 AMB_DEMO=1 streamlit run app.py   # synthetic data, no keys needed
 streamlit run app.py              # real data: put your keys in .streamlit/secrets.toml (see secrets.example.toml)
-pytest -q                         # finance math and SEC parsing tests
+pytest -q                         # DCF, EVA (incl. the seminar's EVA problem), ratios, VaR, Markowitz, Ledoit-Wolf
 ```
 
 *Personal project. Not investment advice.*

@@ -24,6 +24,7 @@ from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 
 import feedparser
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -219,6 +220,33 @@ def peers(symbol: str) -> list[str]:
         t = str(t).upper()
         if t != symbol.upper() and US_TICKER.match(t) and (not known or t in known) and t not in out:
             out.append(t)
+    return out
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def peer_multiples(symbol: str, limit: int = 8) -> dict:
+    """Median and quartiles of the peers' trailing multiples (Finnhub peer group).
+    Multiples that are negative or above 200x are left out as not meaningful."""
+    vals, used = {"pe": [], "ev_ebitda": [], "ps": []}, []
+    for t in peers(symbol)[:limit]:
+        try:
+            km = key_metrics(t)
+        except Exception:
+            continue
+        hit = False
+        for k in vals:
+            v = km.get(k)
+            if v is not None and 0 < v < 200:
+                vals[k].append(v)
+                hit = True
+        if hit:
+            used.append(t)
+    out = {"tickers": used}
+    for k, v in vals.items():
+        if len(v) >= 3:
+            a = np.array(v)
+            out[k] = {"median": float(np.median(a)), "q1": float(np.percentile(a, 25)),
+                      "q3": float(np.percentile(a, 75)), "n": len(v)}
     return out
 
 

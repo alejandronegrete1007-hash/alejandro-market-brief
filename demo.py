@@ -67,6 +67,10 @@ def _sec_facts(sym: str) -> dict:
         return [{"start": f"{y - 1}-09-01", "end": f"{y}-08-31", "val": v, "form": "10-K", "filed": f"{y}-10-15",
                  "fp": "FY", "fy": y} for y, v in zip(years, vals)]
     inst = lambda v: [{"end": "2026-08-31", "val": v, "form": "10-Q", "filed": "2026-10-01"}]  # noqa: E731
+
+    def bal(share):  # year-end balance-sheet values (10-K instants), a share of revenue
+        return [{"end": f"{y}-08-31", "val": r * share, "form": "10-K", "filed": f"{y}-10-15", "fy": y}
+                for y, r in zip(years, rev)]
     return {
         "entityName": sym + " Corp (demo)",
         "facts": {
@@ -84,6 +88,16 @@ def _sec_facts(sym: str) -> dict:
                 "InterestExpense": {"units": {"USD": rows([base * 0.5 * 0.05] * len(rev))}},
                 "CashAndCashEquivalentsAtCarryingValue": {"units": {"USD": inst(base * 0.3)}},
                 "LongTermDebt": {"units": {"USD": inst(base * 0.5)}},
+                "GrossProfit": {"units": {"USD": rows([r * 0.45 for r in rev])}},
+                "ShareBasedCompensation": {"units": {"USD": rows([r * 0.03 for r in rev])}},
+                "Assets": {"units": {"USD": bal(1.6)}},
+                "AssetsCurrent": {"units": {"USD": bal(0.7)}},
+                "LiabilitiesCurrent": {"units": {"USD": bal(0.35)}},
+                "StockholdersEquity": {"units": {"USD": bal(0.9)}},
+                "AccountsReceivableNetCurrent": {"units": {"USD": bal(0.16)}},
+                "InventoryNet": {"units": {"USD": bal(0.12)}},
+                "AccountsPayableCurrent": {"units": {"USD": bal(0.1)}},
+                "LongTermDebtNoncurrent": {"units": {"USD": bal(0.2)}},
             },
         },
     }
@@ -248,6 +262,22 @@ def fake_ai(prompt: str) -> dict:
                 {"market": "MX", "title": "BMV edges up", "what": "The IPC rose 0.3%.", "why": "Shows local stocks holding up.",
                  "watch": "Q3 reports from large issuers.", "sources": [7, 99]},
             ]}
+    if "research note" in prompt:
+        return {"one_liner": "Demo: a cyclical winner priced for the peak; quality is high but the market already pays for it.",
+                "thesis": ["Revenue has compounded quickly and margins sit well above the company's own five-year average.",
+                           "Returns on capital beat the cost of capital by a wide spread, so growth has created value.",
+                           "The price already implies growth above the base case, which limits upside."],
+                "variant": "Wall Street rates it a Buy; this note is more cautious because valuation already reflects the good news.",
+                "valuation": "The probability-weighted DCF sits below the price, and the reverse DCF needs faster growth than history.",
+                "quality": "Cash conversion is solid, leverage is low and ROIC is well above WACC.",
+                "bull": "Demand stays tight and margins hold near the peak.", "base": "Growth fades to trend as margins normalize.",
+                "bear": "The cycle turns and margins fall back toward the average.",
+                "catalysts": ["Next earnings report"], "risks": ["Cyclical pricing", "High expectations", "Customer concentration"],
+                "monitor": ["Gross margin", "Inventory days", "Capex guidance"],
+                "lean": "Hold", "conviction": "Medium",
+                "lean_why": "Demo: quality and momentum are strong, but the valuation already assumes they continue.",
+                "changes_mind": "A pullback toward the base-case value, or guidance that keeps margins at the peak.",
+                "bottom_line": "A high-quality business at a full price: wait for a better entry."}
     return {"situation": "Demo: the stock has more than doubled this year on a sharp upturn in its core market.",
             "momentum": "Price sits above both moving averages; volatility is high, so big swings are normal.",
             "valuation": "Multiples are above the market, and the DCF says the price already assumes strong growth.",

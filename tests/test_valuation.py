@@ -113,3 +113,12 @@ def test_adjusted_beta_pulls_toward_one():
     assert V.adjusted_beta(2.0) == pytest.approx(1.67)
     assert V.adjusted_beta(1.0) == pytest.approx(1.0)
     assert V.adjusted_beta(None) == 1.0
+
+
+def test_steady_state_capex_settles_near_da():
+    heavy = replace(BASE, capex_pct=0.25, da_pct=0.07)
+    assert V.steady_capex(heavy) == pytest.approx(0.07 * 1.15)
+    light = replace(BASE, capex_pct=0.03, da_pct=0.028)
+    assert V.steady_capex(light) == pytest.approx(0.03)
+    shrinking = replace(BASE, capex_pct=0.02, da_pct=0.05)
+    assert V.steady_capex(shrinking) == pytest.approx(0.05)

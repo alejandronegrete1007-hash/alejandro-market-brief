@@ -46,8 +46,8 @@ def render(sym: str, close: pd.Series, q: dict, ctx: dict):
         fig.add_scatter(x=x, y=[price] + list(f[hi]), mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip")
         fig.add_scatter(x=x, y=[price] + list(f[lo]), mode="lines", line=dict(width=0), fill="tonexty",
                         fillcolor=color, name=name, hoverinfo="skip")
-    band(5, 95, "rgba(232,176,75,.12)", "9 in 10 paths")
-    band(25, 75, "rgba(232,176,75,.28)", "Half of the paths")
+    band(5, 95, T.rgba("acc", .12), "9 in 10 paths")
+    band(25, 75, T.rgba("acc", .28), "Half of the paths")
     fig.add_scatter(x=x, y=[price] + list(f[50]), mode="lines", line=dict(color=T.C["gold"], width=1.6, dash="dot"),
                     name="Middle path", hovertemplate="$%{y:,.2f}<extra>Median</extra>")
     levels = [(hi52, "52-week high", T.C["up"]), (lo52, "52-week low", T.C["down"])]

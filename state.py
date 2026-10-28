@@ -4,6 +4,8 @@
 - Mexico leaders: the live YTD top 5 of the Mexican ADRs. Always shown.
 - My stocks: any tickers you add, saved in this browser (localStorage), so they
   survive closing the page. No account or database needed.
+- Research calls: the Buy / Hold / Sell calls you save from a research note, with the
+  price and the S&P 500 level on that day, so the page can track how each call did.
 """
 from __future__ import annotations
 
@@ -24,13 +26,16 @@ _STORE_JS = """
 let lastSent;
 export default function(component) {
   const { data, setStateValue } = component;
-  const KEY = 'amb_my_stocks_v1';
-  let stored = '[]';
-  try {
-    if (data && typeof data.write === 'string') { localStorage.setItem(KEY, data.write); lastSent = data.write; }
-    stored = localStorage.getItem(KEY) || '[]';
-  } catch (e) { stored = '[]'; }
-  if (stored !== lastSent) { lastSent = stored; setStateValue('saved', stored); }
+  const KEYS = {my: 'amb_my_stocks_v1', calls: 'amb_calls_v1'};
+  const out = {};
+  for (const [name, key] of Object.entries(KEYS)) {
+    try {
+      if (data && typeof data[name] === 'string') localStorage.setItem(key, data[name]);
+      out[name] = localStorage.getItem(key) || '[]';
+    } catch (e) { out[name] = '[]'; }
+  }
+  const msg = JSON.stringify(out);
+  if (msg !== lastSent) { lastSent = msg; setStateValue('saved', msg); }
 }
 """
 _store = st.components.v2.component("amb_store", js=_STORE_JS)
@@ -49,18 +54,39 @@ def _clean(raw) -> list[str]:
     return out[:MY_MAX]
 
 
+CALL_FIELDS = ("sym", "date", "price", "spy", "lean", "value", "conviction")
+
+
+def _clean_calls(raw) -> list[dict]:
+    try:
+        items = json.loads(raw) if isinstance(raw, str) else list(raw or [])
+    except Exception:
+        items = []
+    out = []
+    for c in items:
+        if isinstance(c, dict) and TICKER.match(str(c.get("sym", ""))) and c.get("price"):
+            out.append({k: c.get(k) for k in CALL_FIELDS})
+    return out[-50:]
+
+
 def init():
     """Run once per page load, before any page renders."""
     ss = st.session_state
     ss.setdefault("my", [])
+    ss.setdefault("calls", [])
     ss.setdefault("my_loaded", False)
     if "focus" not in ss:
         ss.focus = (st.query_params.get("t") or "").upper() or None
-    data = {"write": json.dumps(ss.my)} if ss.my_loaded else {}
+    data = {"my": json.dumps(ss.my), "calls": json.dumps(ss.calls)} if ss.my_loaded else {}
     r = _store(data=data, key="amb_store", default={"saved": None}, on_saved_change=lambda: None)
     saved = getattr(r, "saved", None)
     if not ss.my_loaded and saved is not None:
-        ss.my = _clean(saved)
+        try:
+            d = json.loads(saved)
+        except Exception:
+            d = {}
+        ss.my = _clean(d.get("my", "[]"))
+        ss.calls = _clean_calls(d.get("calls", "[]"))
         ss.my_loaded = True
 
 
@@ -88,6 +114,18 @@ def add(sym: str) -> str | None:
     st.session_state.my = lst + [sym]
     st.session_state.my_loaded = True
     return None
+
+
+def save_call(call: dict):
+    """Record a research call (ticker, date, price, lean, value) so its result can be tracked."""
+    st.session_state.calls = [c for c in st.session_state.calls
+                              if not (c["sym"] == call["sym"] and c["date"] == call["date"])] + [call]
+    st.session_state.my_loaded = True
+
+
+def delete_call(sym: str, date: str):
+    st.session_state.calls = [c for c in st.session_state.calls if not (c["sym"] == sym and c["date"] == date)]
+    st.session_state.my_loaded = True
 
 
 def remove(sym: str):
