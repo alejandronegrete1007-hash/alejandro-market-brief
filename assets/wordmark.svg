@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="56" viewBox="0 0 300 56">
+  <rect x="2" y="4" width="48" height="48" rx="11" fill="#E8B04B"/>
+  <rect x="12" y="29" width="7" height="13" rx="2" fill="#0A0D12"/>
+  <rect x="22.5" y="21" width="7" height="21" rx="2" fill="#0A0D12"/>
+  <rect x="33" y="13" width="7" height="29" rx="2" fill="#0A0D12"/>
+  <circle cx="38" cy="11.5" r="3.6" fill="#2EC5A1"/>
+  <text x="62" y="23" font-family="Menlo, Consolas, monospace" font-size="11.5" letter-spacing="3" fill="#E8B04B">ALEJANDRO</text>
+  <text x="61" y="46" font-family="Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="700" fill="#E9EEF4" letter-spacing="-0.4">Market Brief</text>
+</svg>
