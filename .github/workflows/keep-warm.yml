@@ -1,0 +1,29 @@
+name: Keep app warm
+
+# Wakes the Streamlit app and pre-loads data so visitors do not wait.
+# Every 2 hours from 6:00 to 24:00 Mexico City time (UTC-6), plus manual runs.
+on:
+  schedule:
+    - cron: "11 12-23/2 * * *"
+    - cron: "11 0,2,4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright
+        run: |
+          pip install playwright==1.49.1
+          python -m playwright install --with-deps chromium
+      - name: Visit every page
+        run: python scripts/keep_warm.py
