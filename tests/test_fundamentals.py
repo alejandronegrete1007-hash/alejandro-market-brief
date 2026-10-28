@@ -27,8 +27,8 @@ def _f():
     idx = pd.to_datetime(["2023-12-31", "2024-12-31", "2025-12-31"])
     s = lambda *v: pd.Series(v, index=idx, dtype=float)  # noqa: E731
     bal = pd.DataFrame({"assets": [1000, 1100, 1200], "equity": [500, 550, 600], "debt": [200, 200, 200],
-                        "cash_all": [100, 120, 150], "assets_current": [400, 420, 450], "liabilities_current": [200, 210, 300],
-                        "receivables": [100, 110, 150], "inventory": [50, 55, 60], "payables": [80, 85, 90]}, index=idx)
+                        "cash_all": [100, 120, 150], "cash": [100, 120, 150], "st_investments": [0, 0, 0], "assets_current": [400, 420, 450], "liabilities_current": [200, 210, 300],
+                        "receivables": [100, 110, 200], "inventory": [50, 55, 60], "payables": [80, 85, 90]}, index=idx)
     return {"revenue": s(1000, 1100, 1210), "net_income": s(100, 110, 130), "ocf": s(150, 160, 100),
             "ebit": s(150, 165, 190), "ebitda": s(200, 220, 250), "fcf": s(90, 100, 60), "gross_profit": s(400, 440, 490),
             "interest_hist": s(10, 10, 10), "sbc": s(5, 5, 5), "balance": bal}
@@ -39,12 +39,13 @@ def test_ratios_by_hand():
     last = t["FY2025"]
     assert last["Revenue growth"] == pytest.approx(0.10)
     assert last["Current ratio"] == pytest.approx(450 / 300)
-    assert last["Quick ratio"] == pytest.approx((150 + 150) / 300)
+    assert last["Quick ratio"] == pytest.approx((150 + 200) / 300)
     assert last["ROE"] == pytest.approx(130 / 575)  # average equity
     dupont = last["DuPont · net margin"] * last["DuPont · asset turnover"] * last["DuPont · equity multiplier"]
     assert dupont == pytest.approx(last["ROE"])
     assert last["Interest coverage (EBIT / interest)"] == pytest.approx(19)
-    assert last["Receivables growth − revenue growth"] == pytest.approx(150 / 110 - 1 - 0.10)
+    assert last["Receivables growth − revenue growth"] == pytest.approx(200 / 110 - 1 - 0.10)
+    assert last["Year-end receivables, days of sales"] == pytest.approx(200 / 1210 * 365)
 
 
 def test_flags_spot_weak_cash_conversion_and_receivables():

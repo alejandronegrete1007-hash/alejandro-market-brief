@@ -55,7 +55,7 @@ def table(f: dict) -> pd.DataFrame:
         "Stock comp, % revenue": _div(sbc, rev),
         # liquidity
         "Current ratio": _div(ca, cl),
-        "Quick ratio": _div(cash.fillna(0) + ar.fillna(0), cl),
+        "Quick ratio": _div(col("cash").fillna(0) + col("st_investments").fillna(0) + ar.fillna(0), cl),
         # leverage
         "Debt / equity": _div(debt, equity),
         "Net debt / EBITDA": _div(debt.fillna(0) - cash.fillna(0), ebitda),
@@ -74,6 +74,7 @@ def table(f: dict) -> pd.DataFrame:
         "Cash conversion (CFO / net income)": _div(ocf, ni),
         "Accruals ratio ((NI − CFO) / assets)": _div(ni - ocf, _avg(assets)),
         "Receivables growth − revenue growth": ar.pct_change() - rev.pct_change(),
+        "Year-end receivables, days of sales": _div(ar, rev) * 365,
     }
     out = pd.DataFrame(rows).T
     out.columns = [f"FY{d.year}" for d in idx]
@@ -84,7 +85,7 @@ KIND = {  # how each row is displayed
     "Current ratio": "x", "Quick ratio": "x", "Debt / equity": "x", "Net debt / EBITDA": "x",
     "Interest coverage (EBIT / interest)": "x", "Asset turnover": "x", "DuPont · asset turnover": "x",
     "DuPont · equity multiplier": "x", "Cash conversion (CFO / net income)": "x",
-    "Days sales outstanding": "days", "Days inventory": "days",
+    "Days sales outstanding": "days", "Days inventory": "days", "Year-end receivables, days of sales": "days",
 }
 
 GROUPS = [
@@ -97,7 +98,7 @@ GROUPS = [
     ("Profitability", ["ROA", "ROE"]),
     ("DuPont: ROE = margin × turnover × leverage", ["DuPont · net margin", "DuPont · asset turnover", "DuPont · equity multiplier"]),
     ("Earnings quality", ["Cash conversion (CFO / net income)", "Accruals ratio ((NI − CFO) / assets)",
-                          "Receivables growth − revenue growth"]),
+                          "Receivables growth − revenue growth", "Year-end receivables, days of sales"]),
 ]
 
 
@@ -143,10 +144,14 @@ def flags(t: pd.DataFrame) -> list[tuple[str, str]]:
     if cc is not None:
         out.append(("ok", f"Profits are backed by cash: operating cash flow is {cc:.1f}x net income.") if cc >= 0.9 else
                    ("watch", f"Operating cash flow is only {cc:.1f}x net income: check what is not turning into cash."))
-    rg = v("Receivables growth − revenue growth")
-    if rg is not None:
-        out.append(("watch", f"Receivables grew {rg:.0%} faster than revenue: a classic early warning of aggressive sales.")
-                   if rg > 0.10 else ("ok", "Receivables are growing in line with revenue."))
+    d_now = v("Year-end receivables, days of sales")
+    d_before = t.iloc[:, -2].get("Year-end receivables, days of sales") if t.shape[1] >= 2 else None
+    if d_now is not None and d_before is not None and not pd.isna(d_before):
+        if d_now > d_before * 1.15 and d_now - d_before > 10:
+            out.append(("watch", f"Year-end receivables rose to {d_now:.0f} days of sales from {d_before:.0f}: check whether sales "
+                                 "are being booked early (a strong last quarter can also explain it)."))
+        else:
+            out.append(("ok", f"Receivables are in line with sales ({d_now:.0f} days at year-end, {d_before:.0f} the year before)."))
     ic = v("Interest coverage (EBIT / interest)")
     if ic is not None:
         out.append(("ok", f"Interest is covered {ic:.1f}x by operating profit.") if ic >= 4 else
