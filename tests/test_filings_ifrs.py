@@ -128,8 +128,10 @@ def test_ads_count_divides_by_the_ratio_and_checks_market_value():
              {"val": 505_277_000, "source": "shares outstanding", "end": "2024-12-31"}]
     n, how = adr.ads_count("PAC", cands, price=230.0, mcap_usd=50_527_700 * 230.0)
     assert n == pytest.approx(50_527_700) and "÷ 10" in how
-    n, how = adr.ads_count("PAC", cands[:1], price=230.0, mcap_usd=11.6e9)
-    assert n == pytest.approx(11.6e9 / 230) and "market cap" in how
+    n, how = adr.ads_count("PAC", cands, price=230.0, mcap_usd=None)  # no market data: the scale error is caught anyway
+    assert n == pytest.approx(50_527_700) and "thousands" in how
+    n, how = adr.ads_count("PAC", cands[1:], price=230.0, mcap_usd=1e9)  # counts far from the market value
+    assert n == pytest.approx(1e9 / 230) and "market cap" in how
     n, _ = adr.ads_count("AMX", [{"val": 60_544e6, "source": "x", "end": "2025-12-31"}], price=24.0, mcap_usd=None)
     assert n == pytest.approx(3_027.2e6)
 

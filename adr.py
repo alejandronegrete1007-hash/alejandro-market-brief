@@ -24,18 +24,29 @@ RATIO = {
 }
 
 
+MAX_MCAP = 5e12  # no listed company is worth more than about $5 trillion
+
+
 def ads_count(sym: str, candidates: list[dict], price: float, mcap_usd: float | None) -> tuple[float, str]:
     """Number of ADR-equivalents (local shares / ratio) and where it came from.
 
-    Each local count the filing offers is divided by the ratio; the first whose implied market value is
-    within a factor of two of the market data is used. If none is, the count implied by the market value
-    itself (market cap / price) is used and said so."""
+    Each local count the filing offers is divided by the ratio. A count that would make the company worth more
+    than any company on earth was tagged in the wrong scale (thousands of shares reported as shares, as
+    Grupo Aeroportuario del Pacífico's 2025 weighted average was), so it is divided by 1,000. When market data
+    gives a dollar market value, the first count within a factor of two of it is used; failing that, the count
+    implied by market value / price."""
     ratio = RATIO.get(sym.upper(), 1)
     unit = "ADR" if ratio != 1 or sym.upper() in RATIO else "share"
     for c in candidates:
-        n = c["val"] / ratio
+        val, fixed = c["val"], ""
+        if price and val / ratio * price > MAX_MCAP and val / 1000 / ratio * price <= MAX_MCAP:
+            val, fixed = val / 1000, ", tagged in thousands by mistake, so ÷ 1,000"
+        n = val / ratio
+        if price and n * price > MAX_MCAP:
+            continue
         if not mcap_usd or not price or 0.5 <= n * price / mcap_usd <= 2:
-            how = f"{c['val'] / 1e6:,.0f}M local shares ÷ {ratio} per {unit} ({c['source']})" if ratio != 1 else c["source"]
+            how = (f"{val / 1e6:,.0f}M local shares ÷ {ratio} per {unit} ({c['source']}{fixed})" if ratio != 1
+                   else c["source"] + fixed)
             return n, how
     if mcap_usd and price:
         return mcap_usd / price, "market cap ÷ price (the share counts in the filing didn't match the market value)"

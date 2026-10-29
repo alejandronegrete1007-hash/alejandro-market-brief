@@ -75,7 +75,8 @@ def basis(sym: str, f: dict, price: float, market: str) -> tuple[dict, dict]:
     if f["taxonomy"] == "ifrs-full":
         try:
             prof = src.profile(sym)
-            mcap_usd = prof["mcap"] if prof.get("currency") == "USD" else None
+            pc = prof.get("currency") or "USD"  # Finnhub may quote an ADR's market value in the home currency
+            mcap_usd = prof["mcap"] / src.fx_per_usd(pc)[0] if prof.get("mcap") else None
         except Exception:
             mcap_usd = None
         ads, how = adr.ads_count(sym, f["share_candidates"], price, mcap_usd)
@@ -298,7 +299,7 @@ def render(sym, q, m, rf, rf_label, close, market, ctx):
     srows.append(f'<tr class="sub"><td>Probability-weighted</td><td>100%</td><td></td><td></td><td></td><td></td>'
                  f'<td>{T.money(weighted)}</td><td>{vs(weighted)}</td></tr>')
     T.show('<div class="amb-wrap" style="margin-top:12px"><table class="amb-table"><thead><tr><th>Scenario</th><th>Probability</th>'
-           '<th>Growth</th><th>Margin yr 5</th><th>Exit</th><th>WACC</th><th>Value / share</th><th>vs price</th></tr></thead>'
+           f'<th>Growth</th><th>Margin yr 5</th><th>Exit</th><th>WACC</th><th>Value / {"ADR" if b["ratio"] and b["ratio"] != 1 else "share"}</th><th>vs price</th></tr></thead>'
            f'<tbody>{"".join(srows)}</tbody></table></div>')
 
     # ---------------------------------------------------------------- four methods (base case)
