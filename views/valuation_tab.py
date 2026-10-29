@@ -73,12 +73,8 @@ def basis(sym: str, f: dict, price: float, market: str) -> tuple[dict, dict]:
     elif cur == "MXN":
         fx, fx_label = src.fx_per_usd("MXN")
     if f["taxonomy"] == "ifrs-full":
-        try:
-            prof = src.profile(sym)
-            pc = prof.get("currency") or "USD"  # Finnhub may quote an ADR's market value in the home currency
-            mcap_usd = prof["mcap"] / src.fx_per_usd(pc)[0] if prof.get("mcap") else None
-        except Exception:
-            mcap_usd = None
+        # No market-value cross-check: Finnhub quotes Mexican ADRs' market value in pesos while labelling it dollars.
+        mcap_usd = None
         ads, how = adr.ads_count(sym, f["share_candidates"], price, mcap_usd)
     else:
         ads, how = f["shares"], f["shares_source"]
