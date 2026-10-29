@@ -183,8 +183,8 @@ def _rates_and_sectors():
     import plotly.graph_objects as go
     a, b = st.columns(2, gap="large")
     with a:
-        T.section("Treasury yield curve", "FRED · today vs a month ago")
-        now, ago = [], []
+        T.section("Treasury yield curve", "FRED · latest close vs a month earlier")
+        now, ago, d_now, d_ago = [], [], None, None
         for lbl, sid in CURVE:
             s_ = _safe(src.fred, sid)
             if s_ is None or s_.empty:
@@ -192,11 +192,15 @@ def _rates_and_sectors():
             past = s_[s_.index <= s_.index[-1] - dt.timedelta(days=30)]
             now.append((lbl, float(s_.iloc[-1])))
             ago.append((lbl, float(past.iloc[-1]) if len(past) else None))
+            if lbl == "10Y":
+                d_now, d_ago = s_.index[-1], (past.index[-1] if len(past) else None)
         if len(now) >= 4:
             fig = go.Figure()
-            fig.add_scatter(x=[x for x, _ in ago], y=[y for _, y in ago], name="A month ago", mode="lines",
+            fig.add_scatter(x=[x for x, _ in ago], y=[y for _, y in ago], mode="lines",
+                            name=f"A month earlier · {d_ago:%b %d}" if d_ago is not None else "A month earlier",
                             line=dict(color=T.C["muted"], width=1.4, dash="dot"))
-            fig.add_scatter(x=[x for x, _ in now], y=[y for _, y in now], name="Today", mode="lines+markers",
+            fig.add_scatter(x=[x for x, _ in now], y=[y for _, y in now], mode="lines+markers",
+                            name=f"Latest close · {d_now:%b %d}" if d_now is not None else "Latest close",
                             line=dict(color=T.C["acc"], width=2.2))
             fig.update_yaxes(ticksuffix="%")
             T.plot(fig, 260)
@@ -207,7 +211,8 @@ def _rates_and_sectors():
             if "10Y" in d and "3M" in d:
                 notes.append(f"10Y − 3M {(d['10Y'] - d['3M']) * 100:+.0f} bps")
             T.show(f'<div class="amb-note">{" · ".join(notes)}. A negative spread (an inverted curve) has come before most US '
-                   'recessions; a steepening curve usually means the market expects rate cuts or more inflation.</div>')
+                   'recessions; a steepening curve usually means the market expects rate cuts or more inflation. FRED '
+                   'publishes each day\'s yields the next morning, so the latest close is usually yesterday\'s.</div>')
         else:
             T.show('<div class="amb-empty">Treasury yields unavailable right now.</div>')
     with b:
