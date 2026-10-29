@@ -85,5 +85,4 @@ for t in TICKERS:
     except Exception as e:  # report and continue
         msg = f"ERROR {type(e).__name__}: {e}"
     print(f"{t}: {msg}")
-    for i in range(0, len(msg), 3500):
-        print(f"::notice title={t}#{i // 3500}::{msg[i:i + 3500]}")
+    print(f"::notice title={t}#0::{msg[:4000]}")  # GitHub keeps at most 10 annotations per step

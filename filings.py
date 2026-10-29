@@ -81,13 +81,15 @@ IFRS_TAGS = {
     "ocf": ["CashFlowsFromUsedInOperatingActivities", "CashFlowsFromUsedInOperatingActivitiesContinuingOperations"],
     "capex": ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities", "PurchaseOfPropertyPlantAndEquipment"],
     # Airports and other concessions invest through intangible assets, so their purchases count as capex too.
-    "capex_intangibles": ["PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities", "PurchaseOfIntangibleAssets"],
+    "capex_intangibles": ["PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities", "PurchaseOfIntangibleAssets",
+                          "PurchaseOfOtherLongtermAssetsClassifiedAsInvestingActivities"],
     "cash": ["CashAndCashEquivalents"],
     "st_investments": ["CurrentInvestments", "ShorttermDepositsNotClassifiedAsCashEquivalents"],
     "lt_investments": [],
     "debt_total": ["Borrowings"],
-    "debt_noncurrent": ["NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings"],
-    "debt_current": ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings"],
+    "debt_noncurrent": ["NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings",
+                        "NoncurrentPortionOfNoncurrentSecuredBankLoansReceived"],
+    "debt_current": ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings", "CurrentPortionOfLongtermBorrowings"],
     "short_borrowings": [],
     "leases": ["LeaseLiabilities"],
     "leases_parts": ["NoncurrentLeaseLiabilities", "CurrentLeaseLiabilities"],
@@ -109,13 +111,15 @@ IFRS_BALANCE = {
     "equity": ["EquityAttributableToOwnersOfParent", "Equity"],
     "receivables": ["TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"],
     "inventory": ["Inventories"],
-    "payables": ["TradeAndOtherCurrentPayables", "TradeAndOtherCurrentPayablesToTradeSuppliers", "CurrentTradePayables"],
+    "payables": ["TradeAndOtherCurrentPayables", "TradeAndOtherCurrentPayablesToTradeSuppliers",
+                 "TradeAndOtherPayablesToTradeSuppliers", "CurrentTradePayables"],
     "cash": ["CashAndCashEquivalents"],
     "st_investments": ["CurrentInvestments", "ShorttermDepositsNotClassifiedAsCashEquivalents"],
     "lt_investments": [],
     "debt_total": ["Borrowings"],
-    "debt_noncurrent": ["NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings"],
-    "debt_current": ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings"],
+    "debt_noncurrent": ["NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings",
+                        "NoncurrentPortionOfNoncurrentSecuredBankLoansReceived"],
+    "debt_current": ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings", "CurrentPortionOfLongtermBorrowings"],
     "short_borrowings": [],
     "leases": ["LeaseLiabilities"],
 }
@@ -312,6 +316,19 @@ def build(facts: dict) -> dict:
         notes.append("Capex not found: free cash flow equals operating cash flow.")
     elif ifrs and not A("capex_intangibles").empty:
         notes.append("Capex includes purchases of intangible assets (concessions, software, licenses).")
+    if ifrs and not rev.empty:
+        # Concession investment tagged with the company's own element (Grupo Aeroportuario del Pacífico) and missing
+        # from the standard lines: when standard capex is under 3% of revenue, add the largest such element.
+        ext = facts["facts"].get("ext", {})
+        std = float(capex.iloc[-1]) / float(rev.iloc[-1]) if not capex.empty and capex.index[-1] == rev.index[-1] else 0.0
+        if ext and std < 0.03:
+            found = [(t, annual(facts, [t], cur, ns="ext")) for t in ext if EXT_CAPEX.search(t)]
+            found = [(t, s_) for t, s_ in found if not s_.empty and s_.index[-1] == rev.index[-1] and s_.iloc[-1] > 0]
+            if found:
+                t, s_ = max(found, key=lambda x: x[1].iloc[-1])
+                capex = s_ if capex.empty else capex.add(s_, fill_value=0.0)
+                words = re.sub(r"(?<!^)(?=[A-Z])", " ", t).lower()
+                notes.append(f"Capex includes the company's own '{words}' line, its investment in concession assets.")
     fcf = (ocf - capex.reindex(ocf.index).fillna(0.0)).dropna()
 
     cash = L("cash")
@@ -356,7 +373,7 @@ def build(facts: dict) -> dict:
         # Operating profit isn't a required IFRS line, so some filers (FEMSA, Coca-Cola FEMSA) tag it with their
         # own element; that one is read from the newest 20-F. Last resort: pre-tax income + interest.
         ext = facts["facts"].get("ext", {})
-        own = annual(facts, [t for t in ext if EXT_KEEP.search(t)], cur, ns="ext") if ext else pd.Series(dtype=float)
+        own = annual(facts, [t for t in ext if EXT_OPERATING.search(t)], cur, ns="ext") if ext else pd.Series(dtype=float)
         if not own.empty and (ebit.empty or own.index.max() > ebit.index.max()):
             ebit = own.combine_first(ebit)
             notes.append("Operating profit comes from the company's own XBRL element in the 20-F (IFRS has no standard one).")
@@ -442,7 +459,10 @@ def _local(tag: str) -> tuple[str, str]:
 
 STANDARD = ("xbrl.ifrs.org", "fasb.org", "xbrl.sec.gov", "xbrl.org/", "w3.org")
 # Company-specific (extension) elements worth keeping: operating profit, which IFRS doesn't require as a line.
-EXT_KEEP = re.compile(r"^(Operating(Income|Profit)(Loss)?|IncomeFromOperations|ProfitFromOperations)$")
+EXT_OPERATING = re.compile(r"^(Operating(Income|Profit)(Loss)?|IncomeFromOperations|ProfitFromOperations)$")
+# ... and investment in concession assets, which airports report with their own elements.
+EXT_CAPEX = re.compile(r"^(PurchaseOf|PaymentsFor|PaymentsToAcquire|AcquisitionOf|InvestmentsIn)\w*(Asset|Concession|Improvement)")
+EXT_KEEP = re.compile(EXT_OPERATING.pattern + "|" + EXT_CAPEX.pattern)
 
 
 def _family(ns_uri: str) -> str | None:
