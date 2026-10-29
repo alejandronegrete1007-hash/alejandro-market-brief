@@ -111,11 +111,11 @@ def get_json(url: str, params: dict | None = None, headers: dict | None = None):
     return r.json()
 
 
-def get_bytes(url: str) -> bytes:
+def get_bytes(url: str, headers: dict | None = None, timeout: int = TIMEOUT) -> bytes:
     if DEMO:
         import demo
         return demo.fake_bytes(url)
-    r = requests.get(url, headers={"User-Agent": UA}, timeout=TIMEOUT)
+    r = requests.get(url, headers={"User-Agent": UA, **(headers or {})}, timeout=timeout)
     r.raise_for_status()
     return r.content
 
@@ -724,3 +724,85 @@ def sec_facts(ticker: str) -> dict:
     if not cik:
         raise DataError(f"{ticker} is not in the SEC's list of companies.")
     return get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json", headers=_sec_headers())
+
+
+@st.cache_data(ttl=86400, show_spinner=False, max_entries=30)
+def sec_latest_annual(ticker: str) -> dict:
+    """Facts of the newest 20-F / 40-F, read from its XBRL instance in the EDGAR archive. The SEC's company
+    facts lag for some foreign filers (in 2026 they still stopped at the 20-F for 2024), so this tops them up."""
+    cik = sec_ciks().get(ticker.upper().replace(".", "-"))
+    if not cik:
+        raise DataError(f"{ticker} is not in the SEC's list of companies.")
+    rec = get_json(f"https://data.sec.gov/submissions/CIK{cik:010d}.json", headers=_sec_headers())["filings"]["recent"]
+    hit = next(((d, a, fm) for d, a, fm in zip(rec["filingDate"], rec["accessionNumber"], rec["form"])
+                if fm in ("20-F", "20-F/A", "40-F", "40-F/A")), None)
+    if not hit:
+        return {}
+    filed, accn, form = hit
+    base = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accn.replace('-', '')}/"
+    names = [i["name"] for i in get_json(base + "index.json", headers=_sec_headers())["directory"]["item"]]
+    inst = [n for n in names if n.endswith("_htm.xml")] or \
+           [n for n in names if n.endswith(".xml") and not n.startswith(("FilingSummary", "MetaLinks"))
+            and not n.endswith(("_cal.xml", "_def.xml", "_lab.xml", "_pre.xml"))]
+    if not inst:
+        return {}
+    import filings
+    out = filings.parse_instance(get_bytes(base + inst[0], headers=_sec_headers(), timeout=40), form.split("/")[0], filed, accn)
+    return {"facts": out, "filed": filed, "form": form}
+
+
+def sec_facts_full(ticker: str) -> dict:
+    """Company facts, topped up with the newest annual report when the SEC's facts haven't caught up to it."""
+    import filings
+    facts = sec_facts(ticker)
+    try:
+        if filings.taxonomy(facts) != "ifrs-full":
+            return facts
+        extra = sec_latest_annual(ticker)
+        if extra.get("facts") and extra["filed"] > filings.newest_filed(facts):
+            return filings.merge(facts, extra["facts"])
+    except Exception:
+        pass
+    return facts
+
+
+# --------------------------------------------------------------------------- currencies and local rates
+# FRED daily exchange rates: (series, True when it is quoted as dollars per unit of the currency)
+FRED_FX = {"MXN": ("DEXMXUS", False), "TWD": ("DEXTAUS", False), "DKK": ("DEXDNUS", False), "EUR": ("DEXUSEU", True),
+           "JPY": ("DEXJPUS", False), "GBP": ("DEXUSUK", True), "CHF": ("DEXSZUS", False), "KRW": ("DEXKOUS", False),
+           "BRL": ("DEXBZUS", False), "CNY": ("DEXCHUS", False), "INR": ("DEXINUS", False), "CAD": ("DEXCAUS", False),
+           "AUD": ("DEXUSAL", True), "SEK": ("DEXSDUS", False), "NOK": ("DEXNOUS", False), "HKD": ("DEXHKUS", False),
+           "ZAR": ("DEXSFUS", False)}
+
+
+def fx_per_usd(cur: str) -> tuple[float, str]:
+    """Units of a currency per US dollar, latest. Pesos use Banxico's FIX, the official rate."""
+    if cur == "USD":
+        return 1.0, ""
+    if cur == "MXN":
+        try:
+            d = banxico_latest(("SF43718",))["SF43718"]
+            return d["value"], f"FIX {d['value']:.4f} pesos per dollar (Banxico, {d['date']:%b %d})"
+        except Exception:
+            pass
+    if cur not in FRED_FX:
+        raise DataError(f"No exchange rate source for {cur}.")
+    sid, inverse = FRED_FX[cur]
+    s = fred(sid, 30)
+    v = 1 / s.iloc[-1] if inverse else s.iloc[-1]
+    return float(v), f"{v:,.4f} {cur} per dollar (FRED {sid}, {s.index[-1]:%b %d})"
+
+
+def mx_bond_10y() -> tuple[float, str]:
+    """Mexico's 10-year government bond (Bono M) yield: Banxico's latest auction, else the OECD monthly series."""
+    try:
+        d = banxico_latest(("SF44071",))["SF44071"]
+        if 3 < d["value"] < 20:
+            return d["value"] / 100, f"Bono M 10Y {d['value']:.2f}% (Banxico auction, {d['date']:%b %d})"
+    except Exception:
+        pass
+    try:
+        s = fred("IRLTLT01MXM156N", 24)
+        return s.iloc[-1] / 100, f"Mexico 10Y bond {s.iloc[-1]:.2f}% (OECD via FRED, {s.index[-1]:%b %Y})"
+    except Exception:
+        return 0.094, "Bono M 10Y unavailable - using a 9.40% placeholder"

@@ -19,6 +19,3 @@ jobs:
       - name: SEC data check
         if: github.event_name == 'workflow_dispatch'
         run: python scripts/check_filings.py
-      - name: IFRS probe (Mexican ADRs)
-        if: github.event_name == 'workflow_dispatch'
-        run: python scripts/probe_ifrs3.py
