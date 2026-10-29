@@ -23,8 +23,11 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
+      - name: Treasury curve dates (one-off)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.probe == 'curve'
+        run: python scripts/probe_curve.py
       - name: SEC data check
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.probe != 'curve'
         run: python scripts/check_filings.py
         env:
           CHECK_TICKERS: ${{ github.event.inputs.tickers || 'MU,AAPL,AMX,FMX,KOF,CX,ASR,PAC,OMAB,TV,TSM' }}
