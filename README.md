@@ -26,7 +26,7 @@ item and table row opens its analysis.
   (default 5%; 4.45% Damodaran, 4.5–5.5% surveys); cost of debt from interest expense / debt; market-value weights.
 - **Drivers** (all adjustable): tax rate, revenue/earnings growth (years 1–5), WACC, cost of equity, perpetual growth,
   EV/EBITDA exit multiple, year-5 EBITDA margin, capex and D&A as % of revenue, working capital per dollar of new revenue.
-  Defaults come from the latest 10-K (SEC XBRL), the peer group and market data: growth = 5-year CAGR capped at 15%,
+  Defaults come from the latest 10-K or 20-F (SEC XBRL), the peer group and market data: growth = 5-year CAGR capped at 15%,
   year-5 margin = the company's 5-year average (mean reversion), exit multiple = the lower of today's own and the peer median EV/EBITDA (no assumed re-rating),
   working capital = (receivables + inventory − payables) / revenue.
 - **Unlevered DCF**: FCFF = EBIT(1−t) + D&A − capex − ΔNWC, discounted at WACC; EV − net debt = equity.
@@ -35,7 +35,11 @@ item and table row opens its analysis.
   settling near D&A) or an EV/EBITDA exit, each cross-checked against the other (implied multiple / implied growth).
 - **Scenarios**: bear / base / bull with editable probabilities; intrinsic value is the probability-weighted average.
 - **Reverse DCF** solves for the growth the current price implies.
-- Mexican ADRs file 20-Fs in IFRS and pesos, with ADR ratios, so the automatic DCF covers US filers; ADRs get multiples and consensus.
+- **Mexican ADRs (20-F, IFRS, pesos)** get the same DCF, scenarios and statement analysis. The app reads the 20-F's
+  XBRL (topping up the SEC's company facts with the newest 20-F when they lag), ignores the dollar "convenience
+  translation", counts IFRS 16 leases as debt, runs the model in pesos at a peso discount rate (Bono M 10Y + beta ×
+  Mexican premium, the seminar's peso model) and converts only the final value: per ADR = peso equity ÷ (ADRs × FIX).
+  Cemex reports in dollars and uses the dollar model with Mexico's country risk.
 - The SEC extraction is checked against filed numbers in CI (`scripts/check_filings.py`); e.g. Micron FY2026: revenue
   $133.19B, EBITDA $108.8B, total debt $5.18B, matching the 10-K.
 

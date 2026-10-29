@@ -312,9 +312,7 @@ def build(facts: dict) -> dict:
     capex = _sum_tags(facts, [tags["capex"], tags.get("capex_intangibles", [])], cur)
     if ocf.empty:
         raise FilingsError("Operating cash flow isn't in the SEC data, so free cash flow can't be computed.")
-    if capex.empty:
-        notes.append("Capex not found: free cash flow equals operating cash flow.")
-    elif ifrs and not A("capex_intangibles").empty:
+    if ifrs and not A("capex_intangibles").empty:
         notes.append("Capex includes purchases of intangible assets (concessions, software, licenses).")
     if ifrs and not rev.empty:
         # Concession investment tagged with the company's own element (Grupo Aeroportuario del Pacífico) and missing
@@ -329,6 +327,8 @@ def build(facts: dict) -> dict:
                 capex = s_ if capex.empty else capex.add(s_, fill_value=0.0)
                 words = re.sub(r"(?<!^)(?=[A-Z])", " ", t).lower()
                 notes.append(f"Capex includes the company's own '{words}' line, its investment in concession assets.")
+    if capex.empty:
+        notes.append("Capex not found: free cash flow equals operating cash flow.")
     fcf = (ocf - capex.reindex(ocf.index).fillna(0.0)).dropna()
 
     cash = L("cash")
@@ -352,8 +352,9 @@ def build(facts: dict) -> dict:
         if lt and lt["val"] > 0:
             lease = lt["val"]
             debt += lease
-            notes.append(f"Debt includes {lease / 1e9:,.1f}B of lease liabilities (IFRS 16 puts rent below EBITDA, "
-                         "so leases count as debt).")
+            if lease >= 0.02 * debt:
+                notes.append(f"Debt includes {lease / 1e9:,.1f}B of lease liabilities (IFRS 16 puts rent below EBITDA, "
+                             "so leases count as debt).")
     cash_total = sum(x["val"] for x in (cash, sti, lti) if x)
     if lti:
         notes.append(f"Cash includes {lti['val'] / 1e9:,.1f}B of long-term marketable securities (liquid bonds).")

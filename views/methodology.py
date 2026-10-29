@@ -16,7 +16,7 @@ SOURCES = [
     ("Twelve Data", "Data provider", "Daily price history: charts, YTD base, volatility, beta", "8 calls/min, 800/day (free)"),
     ("Banxico SIE", "Primary source", "USD/MXN FIX, target rate, TIIE, CETES, inflation (INPC)", "Free token, official data"),
     ("FRED", "Primary source", "Treasury yield curve (1M to 30Y), Fed funds target", "Free key, personal use"),
-    ("SEC EDGAR", "Primary source", "10-K financials (XBRL company facts): DCF, ratios, EVA", "Free, 10 requests/sec"),
+    ("SEC EDGAR", "Primary source", "10-K and 20-F financials (XBRL): DCF, ratios, EVA, incl. Mexican ADRs in IFRS", "Free, 10 requests/sec"),
     ("CoinGecko", "Data provider", "Bitcoin price", "Free public endpoint"),
     ("CNBC, MarketWatch, WSJ, Fed, El Financiero, Google News", "News (RSS)", "Headlines and summaries, always linked to the article",
      "Public feeds"),
@@ -58,14 +58,18 @@ formula for every ADR, with prices in dollars, so it reflects both the stock and
 far the stock usually moves, not where it is going.
 
 **Cost of capital.** Cost of equity by CAPM: 10-year Treasury + adjusted beta × equity risk premium (default 5%; the
-course guides cite 4.45% from Damodaran and 4.5–5.5% from valuation surveys; a Mexican company valued in dollars adds about
-2.8–3.1% of country risk). Adjusted beta = 0.67 × measured beta + 0.33 (Blume). Cost of debt = interest expense / debt,
-after tax. WACC weights equity and debt at market value.
+course guides cite 4.45% from Damodaran and 4.5–5.5% from valuation surveys). Adjusted beta = 0.67 × measured beta + 0.33
+(Blume). Cost of debt = interest expense / debt, after tax. WACC weights equity and debt at market value.
+Mexican companies follow the seminar's two models, matching the currency of their statements: those reporting in pesos
+use the **peso model**, 10-year Bono M (Banxico) + beta × the Mexican market premium (default 7.25%, range 7–7.5%), with
+perpetual growth in pesos (default 4.5%: the 3% inflation target plus real growth); those reporting in dollars (Cemex) use
+the **dollar model**, 10-year Treasury + beta × (US premium + Mexico's country risk), 7.31% by default. Their beta is
+measured against the Mexican market (EWW) and the fallback tax rate is Mexico's 30%.
 
 **DCF: four valuations.** A 5-year model driven by revenue. Revenue grows at the chosen rate (default: 5-year CAGR, capped
 at 15%); the EBITDA margin moves in a straight line from last year's level to your year-5 target (default: the company's own
 5-year average, because peak and trough margins revert); D&A and capex are a % of revenue; working capital absorbs
-(receivables + inventory − payables) / revenue of each year's new revenue, from the last 10-K; taxes apply to EBIT.
+(receivables + inventory − payables) / revenue of each year's new revenue, from the last 10-K or 20-F; taxes apply to EBIT.
 
 - **Unlevered (FCFF at WACC):** FCFF = EBIT × (1 − tax) + D&A − capex − Δ working capital. Enterprise value − net debt = equity.
 - **Levered (FCFE at cost of equity):** FCFE = FCFF − interest × (1 − tax) + net new borrowing (debt grows with revenue).
@@ -81,7 +85,7 @@ at 15%); the EBITDA margin moves in a straight line from last year's level to yo
 
 **Reverse DCF.** Solves for the 5-year growth rate that makes the unlevered perpetuity value equal today's price.
 
-**Financial statement analysis.** From the 10-K: horizontal analysis (growth year over year), vertical analysis (each line
+**Financial statement analysis.** From the 10-K (or the 20-F of foreign filers): horizontal analysis (growth year over year), vertical analysis (each line
 as % of revenue), liquidity (current and quick ratios), leverage (debt / equity, net debt / EBITDA, interest coverage),
 activity (asset turnover, days sales outstanding, days inventory), profitability (ROA, ROE on average balances) and the
 DuPont split ROE = net margin × asset turnover × equity multiplier. Earnings-quality checks flag operating cash flow below
@@ -134,8 +138,16 @@ numbers of every tab (valuation with your assumptions, financial analysis, EVA, 
 say what would change its mind. The call is yours: you can save it, and the Portfolio page tracks its return against the S&P 500
 from that day (price and S&P 500 level are recorded when you save). The note downloads as a printable page.
 
-**DCF for Mexican ADRs.** Not automatic: they file a 20-F in IFRS and pesos, and one ADR equals several local shares.
-Their multiples (Finnhub) are still shown.
+**Mexican ADRs and other IFRS filers.** They file a 20-F under IFRS, mostly in pesos. The statements come from the SEC's
+XBRL data for the 20-F; when the SEC's company facts lag (in 2026 they still stopped at the 2024 20-F), the newest 20-F's
+own XBRL file is read from EDGAR. If the 20-F also shows the latest year in dollars "for convenience", that translation is
+ignored and the peso figures are used. IFRS has no required operating-profit line, so when a company doesn't tag one the
+app uses the company's own element or, failing that, pre-tax income + interest (it says which). Lease liabilities count
+as debt, because under IFRS 16 rent is replaced by depreciation and interest, below EBITDA. Airports invest through
+concession assets, so those purchases count as capex. The model runs in pesos and only the final value is converted:
+value per ADR = peso equity value ÷ (ADRs × FIX), where ADRs = local shares ÷ the depositary ratio (América Móvil 20,
+FEMSA 50, Coca-Cola FEMSA 80, Cemex 30, ASUR 10, GAP 10, OMA 8, Televisa 585). Share counts are checked against the
+market value before use. Other currencies (TSMC in Taiwan dollars, for example) are converted to dollars at today's rate.
 
 **AI.** Gemini only receives the numbers and headlines shown in the app and must cite the headlines behind each story.
 Stories citing nothing real are dropped. It is told never to invent figures, targets or probabilities.
