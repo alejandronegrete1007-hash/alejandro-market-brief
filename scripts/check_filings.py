@@ -5,6 +5,7 @@ Each ticker's numbers are emitted as a GitHub annotation so they can be read wit
 """
 import json
 import os
+import re
 import sys
 import urllib.request
 
@@ -34,7 +35,23 @@ def top_up(cik, facts):
     base = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accn.replace('-', '')}/"
     names = [i["name"] for i in get(base + "index.json")["directory"]["item"]]
     inst = [n for n in names if n.endswith("_htm.xml")][0]
-    extra = filings.parse_instance(get(base + inst, raw=True), form.split("/")[0], filed, accn)
+    xml = get(base + inst, raw=True)
+    extra = filings.parse_instance(xml, form.split("/")[0], filed, accn)
+    if os.environ.get("PROBE_TAGS"):
+        rx = re.compile(r"Borrow|Debt|Notes|Bond|Debenture|Payable|Purchase|Payment|Operating|Acquire|Concession|Addition|Loan")
+        wide = filings.parse_instance(xml, form.split("/")[0], filed, accn, keep_ext=rx)
+        out = []
+        for fam in ("ifrs-full", "ext"):
+            for tag, d in wide.get(fam, {}).items():
+                if not rx.search(tag):
+                    continue
+                for u, rows in d["units"].items():
+                    last = max(rows, key=lambda r: r["end"])
+                    if last["end"] >= "2025-06":
+                        out.append(f"{fam[:3]}:{tag}[{u}{'D' if last.get('start') else 'I'}]={last['val'] / 1e9:.2f}B")
+        msg = " | ".join(out)
+        for i in range(0, len(msg), 3500):
+            print(f"::notice title=TAGS {cik}#{i // 3500}::{msg[i:i + 3500]}")
     return filings.merge(facts, extra), f"topped up with {form} filed {filed}"
 
 

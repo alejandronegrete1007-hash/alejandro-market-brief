@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Tickers for the SEC data check (comma-separated)"
+        required: false
+      probe:
+        description: "Also list the newest annual report's debt, capex and payables tags (any text = yes)"
+        required: false
 
 jobs:
   tests:
@@ -19,3 +26,6 @@ jobs:
       - name: SEC data check
         if: github.event_name == 'workflow_dispatch'
         run: python scripts/check_filings.py
+        env:
+          CHECK_TICKERS: ${{ github.event.inputs.tickers || 'MU,AAPL,AMX,FMX,KOF,CX,ASR,PAC,OMAB,TV,TSM' }}
+          PROBE_TAGS: ${{ github.event.inputs.probe }}

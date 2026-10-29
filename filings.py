@@ -12,6 +12,7 @@ translated into dollars "for convenience", that translation is ignored.
 from __future__ import annotations
 
 import io
+import re
 import xml.etree.ElementTree as ET
 
 import pandas as pd
@@ -162,10 +163,11 @@ def _gaap(facts: dict) -> dict:
     return facts.get("facts", {}).get(taxonomy(facts) if facts.get("facts") else "us-gaap", {})
 
 
-def annual(facts: dict, tags: list[str], unit: str = "USD") -> pd.Series:
+def annual(facts: dict, tags: list[str], unit: str = "USD", ns: str | None = None) -> pd.Series:
     """Fiscal-year values indexed by fiscal year-end date. First tag with data wins,
     later tags only fill years the first one doesn't cover."""
-    gaap, combined = _gaap(facts), None
+    gaap = facts.get("facts", {}).get(ns, {}) if ns else _gaap(facts)
+    combined = None
     for tag in tags:
         rows = []
         for r in gaap.get(tag, {}).get("units", {}).get(unit, []):
@@ -351,20 +353,16 @@ def build(facts: dict) -> dict:
     if gp.empty and not cogs.empty:
         gp = rev.sub(cogs, fill_value=None).dropna()
     if ifrs:
-        # Operating profit isn't a required IFRS line, so some filers (FEMSA, Coca-Cola FEMSA) don't tag it.
-        filled = []
-        if not gp.empty:
-            sga = annual(facts, ["SellingGeneralAndAdministrativeExpense"], cur)
-            if sga.empty:
-                sga = _sum_tags(facts, [["DistributionCosts", "SellingExpense"], ["AdministrativeExpense"]], cur)
-            if not sga.empty:
-                est = (gp - sga.reindex(gp.index)).dropna()
-                if not est.empty and (ebit.empty or est.index.max() > ebit.index.max()):
-                    ebit, filled = est.combine_first(ebit), ["gross profit − selling and administrative expenses"]
-        if ebit.empty and not pretax.empty:
-            ebit, filled = pretax.add(interest, fill_value=0), ["pre-tax income + interest"]
-        if filled:
-            notes.append(f"Operating profit isn't tagged; EBIT = {filled[0]}.")
+        # Operating profit isn't a required IFRS line, so some filers (FEMSA, Coca-Cola FEMSA) tag it with their
+        # own element; that one is read from the newest 20-F. Last resort: pre-tax income + interest.
+        ext = facts["facts"].get("ext", {})
+        own = annual(facts, [t for t in ext if EXT_KEEP.search(t)], cur, ns="ext") if ext else pd.Series(dtype=float)
+        if not own.empty and (ebit.empty or own.index.max() > ebit.index.max()):
+            ebit = own.combine_first(ebit)
+            notes.append("Operating profit comes from the company's own XBRL element in the 20-F (IFRS has no standard one).")
+        elif ebit.empty and not pretax.empty:
+            ebit = pretax.add(interest, fill_value=0)
+            notes.append("Operating profit isn't tagged; EBIT = pre-tax income + interest.")
     elif ebit.empty and not pretax.empty:
         ebit = pretax.add(interest, fill_value=0)
         notes.append("Operating income not tagged; EBIT = pre-tax income + interest.")
@@ -442,6 +440,11 @@ def _local(tag: str) -> tuple[str, str]:
     return ns, name
 
 
+STANDARD = ("xbrl.ifrs.org", "fasb.org", "xbrl.sec.gov", "xbrl.org/", "w3.org")
+# Company-specific (extension) elements worth keeping: operating profit, which IFRS doesn't require as a line.
+EXT_KEEP = re.compile(r"^(Operating(Income|Profit)(Loss)?|IncomeFromOperations|ProfitFromOperations)$")
+
+
 def _family(ns_uri: str) -> str | None:
     if "xbrl.ifrs.org" in ns_uri and ns_uri.endswith("ifrs-full"):
         return "ifrs-full"
@@ -449,12 +452,15 @@ def _family(ns_uri: str) -> str | None:
         return "us-gaap"
     if "xbrl.sec.gov/dei" in ns_uri:
         return "dei"
+    if not any(x in ns_uri for x in STANDARD):
+        return "ext"
     return None
 
 
-def parse_instance(xml: bytes, form: str, filed: str, accn: str = "") -> dict:
+def parse_instance(xml: bytes, form: str, filed: str, accn: str = "", keep_ext: re.Pattern = EXT_KEEP) -> dict:
     """Facts of one XBRL instance document (the one EDGAR extracts from an inline 20-F or 10-K), in the
-    same shape as the SEC's company facts. Only facts without dimensions (whole-company totals) are kept."""
+    same shape as the SEC's company facts. Only facts without dimensions (whole-company totals) are kept,
+    plus the company's own operating-profit element under 'ext'."""
     contexts, units, raw = {}, {}, []
     depth = 0
     for ev, el in ET.iterparse(io.BytesIO(xml), events=("start", "end")):
@@ -475,6 +481,8 @@ def parse_instance(xml: bytes, form: str, filed: str, accn: str = "") -> dict:
         elif el.get("contextRef") is not None:
             fam = _family(_local(el.tag)[0])
             txt = (el.text or "").strip()
+            if fam == "ext" and not keep_ext.search(name):
+                fam = None
             if fam and txt:
                 raw.append((fam, name, el.get("contextRef"), el.get("unitRef"), txt))
         el.clear()

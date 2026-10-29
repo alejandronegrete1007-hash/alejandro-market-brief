@@ -187,7 +187,7 @@ def render(sym: str, ctx: dict):
     e_ = ctx.get("eva_d")
     if e_:
         cards.append(("ROIC vs WACC", f"{e_['roic']:.0%} vs {e_['wacc']:.0%}",
-                      f"EVA {T.big(e_['eva'])} · {'creates' if e_['eva'] > 0 else 'destroys'} value"))
+                      f"EVA {T.big(e_['eva'], e_.get('cs', '$'))} · {'creates' if e_['eva'] > 0 else 'destroys'} value"))
     cards.append(("Consensus", ctx.get("consensus_label") or "—", "Wall Street analysts"))
     T.show(T.kv(cards))
 

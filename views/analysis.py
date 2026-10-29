@@ -43,10 +43,12 @@ def render():
     if not sym:
         return
     market = state.market_of(sym)
-    etf_or_mx = src.is_etf(sym) or market == "MX"
+    etf = src.is_etf(sym)
     src.prefetch([(src.try_quote, sym), (src.profile, sym), (src.us_market_status,), (src.next_earnings, sym),
                   (src.company_news, sym), (src.key_metrics, sym), (src.recommendations, sym), (src.risk_free,),
-                  (src.peer_multiples, sym), None if etf_or_mx else (src.sec_facts, sym),
+                  (src.peer_multiples, sym), None if etf else (src.sec_facts, sym),
+                  None if etf or market != "MX" else (src.sec_latest_annual, sym),
+                  None if market != "MX" else (src.try_history, "EWW"),
                   (src.try_history, sym), (src.try_history, "SPY")])
     q = src.try_quote(sym)
     if not q:
