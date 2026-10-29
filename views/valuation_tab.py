@@ -422,7 +422,7 @@ def render(sym, q, m, rf, rf_label, close, market, ctx):
         T.show('<div class="amb-note">Peer bars apply the peers\' 25th to 75th percentile multiple to this company. DCF method '
                'bars move WACC (and cost of equity) ±1 pt and perpetual growth ±0.5 pt or the exit multiple ±2x.</div>')
     with a2:
-        T.section("Sensitivity", "unlevered value per share", "What-if")
+        T.section("Sensitivity", "unlevered value per " + ("ADR, US$" if b["ratio"] and b["ratio"] != 1 else "share"), "What-if")
         sens_kind = st.segmented_control("Terminal", ["Perpetual growth", "Exit multiple"], default="Perpetual growth",
                                          key=k + "sens", label_visibility="collapsed")
         waccs = [wacc - 0.01, wacc - 0.005, wacc, wacc + 0.005, wacc + 0.01]

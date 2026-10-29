@@ -103,6 +103,51 @@ def _sec_facts(sym: str) -> dict:
     }
 
 
+def _ifrs_facts(sym: str) -> dict:
+    """A Mexican ADR's 20-F in IFRS: pesos (Cemex in dollars), December year-end, local shares."""
+    import adr
+    rng = np.random.default_rng(_seed(sym + "ifrs"))
+    cur = "USD" if sym == "CX" else "MXN"
+    fx = 1 if cur == "USD" else 18.7
+    years = list(range(2018, 2026))
+    price = _path(sym).iloc[-1]
+    ads = 120e9 / 30 / price  # about a $4B company at today's demo price
+    base = ads * price * fx * 0.7
+    rev = [base * (1.07 ** (i - 7)) * rng.uniform(0.96, 1.04) for i in range(len(years))]
+
+    def rows(vals, form="20-F"):
+        return [{"start": f"{y}-01-01", "end": f"{y}-12-31", "val": v, "form": form, "filed": f"{y + 1}-04-20", "fy": y}
+                for y, v in zip(years, vals)]
+
+    def bal(share):
+        return [{"end": f"{y}-12-31", "val": r * share, "form": "20-F", "filed": f"{y + 1}-04-20", "fy": y} for y, r in zip(years, rev)]
+    t = {
+        "Revenue": {"units": {cur: rows(rev), **({} if cur == "USD" else {"USD": rows([rev[-1] / fx])[-1:]})}},
+        "ProfitLossAttributableToOwnersOfParent": {"units": {cur: rows([r * 0.09 for r in rev])}},
+        "CashFlowsFromUsedInOperatingActivities": {"units": {cur: rows([r * 0.26 for r in rev])}},
+        "PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities": {"units": {cur: rows([r * 0.11 for r in rev])}},
+        "DepreciationAndAmortisationExpense": {"units": {cur: rows([r * 0.12 for r in rev])}},
+        "IncomeTaxExpenseContinuingOperations": {"units": {cur: rows([r * 0.05 for r in rev])}},
+        "ProfitLossBeforeTax": {"units": {cur: rows([r * 0.16 for r in rev])}},
+        "InterestExpense": {"units": {cur: rows([r * 0.04 for r in rev])}},
+        "CashAndCashEquivalents": {"units": {cur: bal(0.08)}},
+        "Borrowings": {"units": {cur: bal(0.55)}},
+        "LeaseLiabilities": {"units": {cur: bal(0.12)}},
+        "Assets": {"units": {cur: bal(1.9)}},
+        "CurrentAssets": {"units": {cur: bal(0.45)}},
+        "CurrentLiabilities": {"units": {cur: bal(0.5)}},
+        "EquityAttributableToOwnersOfParent": {"units": {cur: bal(0.6)}},
+        "TradeAndOtherCurrentReceivables": {"units": {cur: bal(0.2)}},
+        "Inventories": {"units": {cur: bal(0.05)}},
+        "TradeAndOtherCurrentPayables": {"units": {cur: bal(0.17)}},
+        "NumberOfSharesOutstanding": {"units": {"shares": [{"end": "2025-12-31", "val": ads * adr.RATIO.get(sym, 1),
+                                                            "form": "20-F", "filed": "2026-04-20"}]}},
+    }
+    if sym != "KOF":  # KOF shows the fallback when operating profit isn't tagged
+        t["ProfitLossFromOperatingActivities"] = {"units": {cur: rows([r * 0.19 for r in rev])}}
+    return {"entityName": sym + " S.A.B. de C.V. (demo)", "facts": {"ifrs-full": t}}
+
+
 def _bx_rows(sid: str, start: str, end: str) -> list[dict]:
     idx = pd.bdate_range(start, end) if sid in ("SF43718", "SF61745", "SF43783") else (
         pd.date_range(start, end, freq="W-THU") if sid == "SF43936" else pd.date_range(start, end, freq="MS"))
@@ -115,6 +160,8 @@ def _bx_rows(sid: str, start: str, end: str) -> list[dict]:
         v = np.clip(np.round(np.linspace(11.0, 7.0, n) * 4) / 4, 7.0, 11.25) + (0.25 if sid == "SF43783" else 0)
     elif sid == "SF43936":
         v = np.linspace(10.8, 7.1, n) + rng.normal(0, 0.05, n)
+    elif sid == "SF44071":
+        v = np.linspace(9.9, 9.2, n) + rng.normal(0, 0.05, n)
     else:
         v = np.clip(4.6 + np.cumsum(rng.normal(-0.02, 0.15, n)), 3.0, 5.5)
         v = v - v[-1] + 3.76
@@ -125,7 +172,7 @@ DEMO_TICKERS = ["MRNA", "SNDK", "DELL", "MU", "MPC", "NVDA", "AMD", "INTC", "HPQ
 
 BX_TITLES = {"SF43718": "Tipo de cambio Pesos por dólar E.U.A. Para solventar obligaciones (FIX)",
              "SF61745": "Tasa objetivo", "SF43783": "TIIE a 28 días", "SF43936": "Cetes a 28 días",
-             "SP30578": "Inflación anual INPC"}
+             "SP30578": "Inflación anual INPC", "SF44071": "Bonos M a 10 años, tasa de rendimiento"}
 
 
 def fake_json(url: str, p: dict):
@@ -144,7 +191,8 @@ def fake_json(url: str, p: dict):
             return {"name": {"MU": "Micron Technology", "MRNA": "Moderna", "SNDK": "Sandisk", "DELL": "Dell Technologies",
                              "MPC": "Marathon Petroleum"}.get(sym, sym + " Inc"),
                     "finnhubIndustry": "Semiconductors" if sym in ("MU", "SNDK") else "Technology",
-                    "logo": "", "weburl": "", "marketCapitalization": 120000, "currency": "USD"}
+                    "logo": "", "weburl": "", "currency": "USD",
+                    "marketCapitalization": 0 if sym in ("AMX", "FMX", "KOF", "CX", "ASR", "PAC", "OMAB", "TV") else 120000}
         if "/stock/metric" in url:
             return {"metric": {"peTTM": 24.3, "forwardPE": 17.8, "psTTM": 5.2, "pbQuarterly": 4.1, "evEbitdaTTM": 13.4,
                                "currentEv/freeCashFlowTTM": 31.0, "netProfitMarginTTM": 18.2, "roeTTM": 22.5,
@@ -208,7 +256,11 @@ def fake_json(url: str, p: dict):
                 enumerate(DEMO_TICKERS)}
     if "companyfacts" in url:
         cik = int(re.search(r"CIK(\d+)", url).group(1)) - 1000
-        return _sec_facts(DEMO_TICKERS[cik])
+        sym = DEMO_TICKERS[cik]
+        import mexico
+        return _ifrs_facts(sym) if sym in mexico.UNIVERSE else _sec_facts(sym)
+    if "submissions" in url:
+        return {"filings": {"recent": {"filingDate": [], "accessionNumber": [], "form": [], "primaryDocument": []}}}
     if "generativelanguage" in url:
         return {"models": [{"name": "models/gemini-3.0-flash", "supportedGenerationMethods": ["generateContent"]},
                            {"name": "models/gemini-3.0-flash-lite", "supportedGenerationMethods": ["generateContent"]}]}
