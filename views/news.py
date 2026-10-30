@@ -144,12 +144,16 @@ def render():
             T.show(_list(pool, 40))
     if failed:
         T.show(f'<div class="amb-note">Feeds that didn\'t answer this time: {T.esc(", ".join(failed))}</div>')
+    ai_error = ""
     try:
         reads = ai.sector_reads(f"{dt.datetime.now(src.MX):%Y-%m-%d-%H}", blocks) if blocks else {}
-    except Exception:
+    except Exception as e:
         reads = ai.LAST.get("sectors") or {}  # the last good read, else each card shows its newest headline
+        ai_error = "" if reads else str(e)
     with cards_slot.container():
-        hit = T.clickable(_cards(tagged, reads, False), "news_sectors")
+        hit = T.clickable(_cards(tagged, reads, False, bool(ai_error)), "news_sectors")
+        if ai_error:
+            T.show(f'<div class="amb-note" style="margin-top:8px">AI reads unavailable: {T.esc(ai_error)}</div>')
     if hit and hit.startswith("s:"):
         st.session_state["news_sector"] = None if st.session_state.get("news_sector") == hit[2:] else hit[2:]
         st.rerun()
@@ -158,7 +162,7 @@ def render():
     T.footer("Headlines link to the original articles · refreshed every hour")
 
 
-def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
+def _cards(tagged: dict, reads: dict | None, waiting: bool, failed: bool = False) -> str:
     """Sector cards: the AI read (or a spinner while it is written) and the sector's newest headline."""
     cards = []
     for name, etf, _ in SECTORS:
@@ -177,6 +181,8 @@ def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
                 read = f'<p>{T.esc(r.get("read", ""))}</p>'
             elif waiting:
                 read = '<div class="wait"><span class="amb-spin"></span>Writing the AI read…</div>'
+            elif failed:
+                read = '<div class="wait">AI read unavailable right now</div>'
             else:
                 read = ""
             body = read + f'<div class="latest"><b>Latest</b>{T.esc(items[0]["title"])}</div>'
