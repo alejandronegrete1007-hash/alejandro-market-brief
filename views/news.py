@@ -38,7 +38,7 @@ SECTORS = [
                                 "warner", "paramount", "televisa", "américa móvil", "america movil", "telecomunic"]),
     ("Crypto", "IBIT", ["bitcoin", "crypto", "ethereum", "stablecoin", "coinbase", "blockchain", "cripto"]),
 ]
-WHOLE = {"rate", "auto"}  # would also catch "rating", "automation"
+WHOLE = {"rate", "auto", "meta", "intel", "gold", "target"}  # else "rating", "automation", "metals", "intelligence", "golden", "targeted"
 
 
 def _kw(k: str) -> str:
