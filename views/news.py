@@ -90,34 +90,13 @@ def render():
     pool = src.dedupe(us + mx + sec)
     tagged = _tag(pool)
 
-    # ---- sectors
+    # ---- sectors: drawn first without the AI read, so the page doesn't wait for Gemini
     blocks = "\n\n".join(f"## {name}\n" + "\n".join(f"- {n['title']}" for n in tagged[name][:12])
                          for name, _, _ in SECTORS if tagged[name])
-    try:
-        reads = ai.sector_reads(ai.stamp_6h(dt.datetime.now(src.MX)), blocks) if blocks else {}
-    except Exception:
-        reads = {}
     T.section("By sector", "click a sector to filter the headlines · AI read of its headlines")
-    cards = []
-    for name, etf, _ in SECTORS:
-        n = len(tagged[name])
-        r = reads.get(name) or {}
-        tone = r.get("tone") if r.get("tone") in TONE else None
-        q = src.try_quote(etf)
-        sel = " sel" if st.session_state.get("news_sector") == name else ""
-        tone_html = f'<span class="amb-pill {TONE[tone]}">{tone}</span>' if tone else ""
-        count = f"{n} headline" + ("s" if n != 1 else "")
-        line = T.esc(r.get("read", "")) if r else ("No headlines in the last 36 hours." if not n else "")
-        pct = T.pill(q["pct"]) if q else ""
-        cards.append(
-            f'<div class="amb-sector{sel}"{T.go_attr("s:" + name)}><div class="top"><span class="nm">{T.esc(name)}</span>{pct}</div>'
-            f'<div class="meta">{tone_html}<span>{count} · {etf}</span></div><p>{line}</p></div>')
-    hit = T.clickable('<div class="amb-grid g3 stack">' + "".join(cards) + "</div>", "news_sectors")
-    if hit and hit.startswith("s:"):
-        st.session_state["news_sector"] = None if st.session_state.get("news_sector") == hit[2:] else hit[2:]
-        st.rerun()
-    elif hit:
-        route(hit)
+    cards_slot = st.empty()
+    with cards_slot.container():
+        T.show(_cards(tagged, None, bool(blocks)))
     T.show('<div class="amb-note"><span class="amb-tag ai">AI</span>The tone and the line are written by Gemini only from each '
            'sector\'s headlines; the % is the sector ETF today. Headlines are assigned to sectors by keywords (English and '
            'Spanish), so one can appear in several.</div>')
@@ -149,4 +128,39 @@ def render():
     failed = f1 + f2 + f3
     if failed:
         T.show(f'<div class="amb-note">Feeds that didn\'t answer this time: {T.esc(", ".join(failed))}</div>')
-    T.footer("Headlines link to the original articles · refreshed every 30 minutes")
+    try:
+        reads = ai.sector_reads(ai.stamp_6h(dt.datetime.now(src.MX)), blocks) if blocks else {}
+    except Exception:
+        reads = {}
+    with cards_slot.container():
+        hit = T.clickable(_cards(tagged, reads, False), "news_sectors")
+    if hit and hit.startswith("s:"):
+        st.session_state["news_sector"] = None if st.session_state.get("news_sector") == hit[2:] else hit[2:]
+        st.rerun()
+    elif hit:
+        route(hit)
+    T.footer("Headlines link to the original articles · refreshed every hour")
+
+
+def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
+    """Sector cards. reads=None draws them before the AI read arrives."""
+    cards = []
+    for name, etf, _ in SECTORS:
+        n = len(tagged[name])
+        r = (reads or {}).get(name) or {}
+        tone = r.get("tone") if r.get("tone") in TONE else None
+        q = src.try_quote(etf)
+        sel = " sel" if st.session_state.get("news_sector") == name else ""
+        tone_html = f'<span class="amb-pill {TONE[tone]}">{tone}</span>' if tone else ""
+        count = f"{n} headline" + ("s" if n != 1 else "")
+        if not n:
+            line = "No headlines in the last 36 hours."
+        elif r:
+            line = T.esc(r.get("read", ""))
+        else:
+            line = '<span style="color:var(--muted)">AI read on its way…</span>' if waiting else ""
+        pct = T.pill(q["pct"]) if q else ""
+        cards.append(
+            f'<div class="amb-sector{sel}"{T.go_attr("s:" + name)}><div class="top"><span class="nm">{T.esc(name)}</span>{pct}</div>'
+            f'<div class="meta">{tone_html}<span>{count} · {etf}</span></div><p>{line}</p></div>')
+    return '<div class="amb-grid g3 stack">' + "".join(cards) + "</div>"

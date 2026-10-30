@@ -660,7 +660,7 @@ def _parse_feed(source: str, url: str, market: str) -> list[dict]:
     return out
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def feeds(market: str) -> tuple[list[dict], list[str]]:
     items, failed = _parallel_feeds(list((US_FEEDS if market == "US" else MX_FEEDS).items()), market)
     if market == "US":
@@ -674,7 +674,7 @@ def feeds(market: str) -> tuple[list[dict], list[str]]:
     return items, failed
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def sector_headlines() -> tuple[list[dict], list[str]]:
     """Headlines from the sector feeds, last 36 hours."""
     items, failed = _parallel_feeds([(k.replace("CNBC ", "CNBC · "), v) for k, v in SECTOR_FEEDS.items()], "US")
