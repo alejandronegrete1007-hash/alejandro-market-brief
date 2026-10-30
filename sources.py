@@ -689,15 +689,28 @@ def _norm(t: str) -> str:
 def dedupe(items: list[dict], threshold: float = 0.78) -> list[dict]:
     """Newest first, dropping near-duplicate headlines."""
     floor = dt.datetime.min.replace(tzinfo=ET)
-    kept, norms = [], []
+    kept, norms, exact = [], [], set()
+    sm = SequenceMatcher(None)
     for it in sorted(items, key=lambda x: x["time"] or floor, reverse=True):
         n = _norm(it["title"])
-        if n and not any(SequenceMatcher(None, n, k).ratio() >= threshold for k in norms):
+        if not n or n in exact:
+            continue
+        sm.set_seq2(n)  # the matcher caches its analysis of seq2, so each new title is analyzed once
+        dup = False
+        for k in norms:
+            sm.set_seq1(k)
+            # cheap upper bounds first; the exact ratio only for titles that could be near-duplicates
+            if sm.real_quick_ratio() >= threshold and sm.quick_ratio() >= threshold and sm.ratio() >= threshold:
+                dup = True
+                break
+        if not dup:
             kept.append(it)
             norms.append(n)
+            exact.add(n)
     return kept
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def recent_headlines(market: str) -> tuple[list[dict], list[str]]:
     """Headlines from roughly the last trading day (longer on Mondays and weekends)."""
     now = dt.datetime.now(ET)

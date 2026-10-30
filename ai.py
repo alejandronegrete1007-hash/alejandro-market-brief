@@ -87,6 +87,7 @@ def _read(r) -> dict:
 
 
 _COOLDOWN = {"until": 0.0}
+BUDGET = 60  # seconds a page may wait for Gemini across all the models it tries
 LAST: dict = {}  # last good daily brief, shown if a new one can't be written (quota or outage)
 
 
@@ -99,7 +100,11 @@ def _generate(prompt: str, temperature: float = 0.3) -> dict:
         raise AIError(f"Gemini's free quota is used up for the moment; the app will try again in about {mins} min.")
     last, quota = "no model tried", 0
     tried = models()[:6]
+    start = time.time()
     for model in tried:  # slow, busy (503), retired (404) or out of quota (429): try the next one
+        if time.time() - start > BUDGET:  # never keep a page waiting more than about a minute
+            last = f"{last}; stopped after {BUDGET} s"
+            break
         try:
             r = _post(model, prompt, temperature, _thinking(model))
             if r.status_code == 400 and _thinking(model):  # model doesn't take that setting
@@ -120,6 +125,7 @@ def _generate(prompt: str, temperature: float = 0.3) -> dict:
     if quota and quota >= len(tried) - 1:  # every model out of quota: stop asking for a while instead of hammering
         _COOLDOWN["until"] = time.time() + 10 * 60
         raise AIError("Gemini's free daily quota is used up for the moment; the app will try again in 10 minutes.")
+    _COOLDOWN["until"] = time.time() + 3 * 60  # busy or slow: don't make the next visitors wait for it too
     raise AIError(f"Gemini is busy right now ({last}). Try again in a few minutes.")
 
 
@@ -234,8 +240,10 @@ headlines conflict or are thin. Do not mention sectors with no headlines.
 {_blocks}
 
 Return JSON exactly like: {{"sectors": {{"<sector name>": {{"tone": "Positive", "read": "..."}}}}}}"""
-    out = _generate(prompt, temperature=0.2)
-    return out.get("sectors") or {}
+    out = _generate(prompt, temperature=0.2).get("sectors") or {}
+    if out:
+        LAST["sectors"] = out
+    return out
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner=False, max_entries=20)

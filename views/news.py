@@ -38,7 +38,16 @@ SECTORS = [
                                 "warner", "paramount", "televisa", "américa móvil", "america movil", "telecomunic"]),
     ("Crypto", "IBIT", ["bitcoin", "crypto", "ethereum", "stablecoin", "coinbase", "blockchain", "cripto"]),
 ]
-_RX = {name: re.compile(r"(?<![a-z0-9])(" + "|".join(re.escape(k) for k in kws) + ")", re.I) for name, _, kws in SECTORS}
+WHOLE = {"rate", "auto"}  # would also catch "rating", "automation"
+
+
+def _kw(k: str) -> str:
+    """Keywords match at the start of a word ('chip' finds 'chipmaker'); short ones only as a whole word,
+    with an optional plural ('ai' must not find 'airline', 'rate' must not find 'rating')."""
+    return re.escape(k) + (r"s?(?![a-z0-9])" if len(k) <= 3 or k in WHOLE else "")
+
+
+_RX = {name: re.compile(r"(?<![a-z0-9])(" + "|".join(_kw(k) for k in kws) + ")", re.I) for name, _, kws in SECTORS}
 TONE = {"Positive": "up", "Negative": "down", "Mixed": "flat"}
 
 
@@ -50,6 +59,18 @@ def _tag(items: list[dict]) -> dict[str, list[dict]]:
             if _RX[name].search(text):
                 out[name].append(it)
     return out
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _pool() -> dict:
+    """Every headline once, tagged by sector. Cached, because removing near-duplicates among a few hundred
+    headlines takes a second or more and doesn't need to run on every click."""
+    src.prefetch([(src.recent_headlines, "US"), (src.recent_headlines, "MX"), (src.sector_headlines,)])
+    us, f1 = src.recent_headlines("US")
+    mx, f2 = src.recent_headlines("MX")
+    sec, f3 = src.sector_headlines()
+    pool = src.dedupe(us + mx + sec)
+    return {"us": us, "mx": mx, "pool": pool, "wall": src.dedupe(us + sec), "tagged": _tag(pool), "failed": f1 + f2 + f3}
 
 
 def _company_news(symbols: list[str]) -> list[dict]:
@@ -82,13 +103,9 @@ def render():
            'El Financiero, Google News and Finnhub, by market and by sector, plus the news on the stocks you hold and follow.'
            '</div></div></div>')
     with st.spinner("Reading the news feeds..."):
-        src.prefetch([(src.recent_headlines, "US"), (src.recent_headlines, "MX"), (src.sector_headlines,)]
-                     + [(src.try_quote, etf) for _, etf, _ in SECTORS])
-        us, f1 = src.recent_headlines("US")
-        mx, f2 = src.recent_headlines("MX")
-        sec, f3 = src.sector_headlines()
-    pool = src.dedupe(us + mx + sec)
-    tagged = _tag(pool)
+        src.prefetch([(_pool,)] + [(src.try_quote, etf) for _, etf, _ in SECTORS])
+        d = _pool()
+    us, mx, pool, wall, tagged, failed = d["us"], d["mx"], d["pool"], d["wall"], d["tagged"], d["failed"]
 
     # ---- sectors: drawn first without the AI read, so the page doesn't wait for Gemini
     blocks = "\n\n".join(f"## {name}\n" + "\n".join(f"- {n['title']}" for n in tagged[name][:12])
@@ -115,7 +132,7 @@ def render():
         view = st.segmented_control("Show", ["All", "Wall Street", "México", "My stocks"], default="All",
                                     key="news_view", label_visibility="collapsed")
         if view == "Wall Street":
-            T.show(_list(src.dedupe(us + sec), 40))
+            T.show(_list(wall, 40))
         elif view == "México":
             T.show(_list(mx, 40))
         elif view == "My stocks":
@@ -125,13 +142,12 @@ def render():
             click(_list(items, 40, tickers=True), "news_mine")
         else:
             T.show(_list(pool, 40))
-    failed = f1 + f2 + f3
     if failed:
         T.show(f'<div class="amb-note">Feeds that didn\'t answer this time: {T.esc(", ".join(failed))}</div>')
     try:
         reads = ai.sector_reads(ai.stamp_6h(dt.datetime.now(src.MX)), blocks) if blocks else {}
     except Exception:
-        reads = {}
+        reads = ai.LAST.get("sectors") or {}  # the last good read, else each card shows its newest headline
     with cards_slot.container():
         hit = T.clickable(_cards(tagged, reads, False), "news_sectors")
     if hit and hit.startswith("s:"):
@@ -157,8 +173,10 @@ def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
             line = "No headlines in the last 36 hours."
         elif r:
             line = T.esc(r.get("read", ""))
-        else:
-            line = '<span style="color:var(--muted)">AI read on its way…</span>' if waiting else ""
+        elif waiting:
+            line = '<span style="color:var(--muted)">AI read on its way…</span>'
+        else:  # no AI read: the newest headline of the sector instead
+            line = f'<span style="color:var(--muted)">Latest:</span> {T.esc(tagged[name][0]["title"])}'
         pct = T.pill(q["pct"]) if q else ""
         cards.append(
             f'<div class="amb-sector{sel}"{T.go_attr("s:" + name)}><div class="top"><span class="nm">{T.esc(name)}</span>{pct}</div>'
