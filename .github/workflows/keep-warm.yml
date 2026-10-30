@@ -1,11 +1,12 @@
 name: Keep app warm
 
 # Wakes the Streamlit app and pre-loads data so visitors do not wait.
-# Every 2 hours from 6:00 to 24:00 Mexico City time (UTC-6), plus manual runs.
+# Every hour from 6:00 to 23:00 Mexico City time (UTC-6), just after the hour so the hourly AI sector read
+# is written by this visit and not by the first visitor; plus manual runs.
 on:
   schedule:
-    - cron: "11 12-23/2 * * *"
-    - cron: "11 0,2,4 * * *"
+    - cron: "2 12-23 * * *"
+    - cron: "2 0-5 * * *"
   workflow_dispatch:
 
 concurrency:

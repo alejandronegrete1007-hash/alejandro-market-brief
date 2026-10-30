@@ -228,9 +228,10 @@ if the data is thin or contradictory, choose "Hold" with "Low" conviction and sa
     return _generate(prompt, temperature=0.35)
 
 
-@st.cache_data(ttl=3 * 3600, show_spinner=False, max_entries=8)
+@st.cache_data(ttl=3600, show_spinner=False, max_entries=4)
 def sector_reads(stamp: str, _blocks: str) -> dict:
-    """One line and a tone per sector, from that sector's headlines only."""
+    """One line and a tone per sector, from that sector's headlines only. Written once per hour (the stamp is
+    the hour, and the headlines are refreshed hourly too); everyone visiting in that hour gets the saved copy."""
     prompt = f"""{STYLE}
 
 For each sector below, read ONLY its headlines and return its tone for investors today and one sentence

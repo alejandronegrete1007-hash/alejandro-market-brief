@@ -280,6 +280,12 @@ div[data-testid="stButton"] button[kind="primary"]:hover{background:var(--gold-d
 .amb-sector .nm{font-family:var(--display);font-size:1.12rem;color:var(--text);}
 .amb-sector .meta{display:flex;gap:8px;align-items:center;margin-top:6px;color:var(--muted);font-size:.74rem;}
 .amb-sector p{margin:8px 0 0;color:var(--text2);font-size:.86rem;line-height:1.5;}
+.amb-sector .latest{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--text2);font-size:.8rem;line-height:1.45;}
+.amb-sector .latest b{color:var(--muted);font-weight:500;margin-right:4px;}
+.amb-sector .wait{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--muted);font-size:.8rem;}
+.amb-spin{width:13px;height:13px;border-radius:50%;border:2px solid var(--line2);border-top-color:var(--acc);
+  animation:amb-spin .8s linear infinite;flex:none;}
+@keyframes amb-spin{to{transform:rotate(360deg);}}
 .amb-nlist{display:flex;flex-direction:column;}
 .amb-nrow{padding:13px 2px;border-bottom:1px solid var(--line);}
 .amb-nrow a{color:var(--text)!important;font-weight:500;line-height:1.4;}

@@ -145,7 +145,7 @@ def render():
     if failed:
         T.show(f'<div class="amb-note">Feeds that didn\'t answer this time: {T.esc(", ".join(failed))}</div>')
     try:
-        reads = ai.sector_reads(ai.stamp_6h(dt.datetime.now(src.MX)), blocks) if blocks else {}
+        reads = ai.sector_reads(f"{dt.datetime.now(src.MX):%Y-%m-%d-%H}", blocks) if blocks else {}
     except Exception:
         reads = ai.LAST.get("sectors") or {}  # the last good read, else each card shows its newest headline
     with cards_slot.container():
@@ -159,10 +159,11 @@ def render():
 
 
 def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
-    """Sector cards. reads=None draws them before the AI read arrives."""
+    """Sector cards: the AI read (or a spinner while it is written) and the sector's newest headline."""
     cards = []
     for name, etf, _ in SECTORS:
-        n = len(tagged[name])
+        items = tagged[name]
+        n = len(items)
         r = (reads or {}).get(name) or {}
         tone = r.get("tone") if r.get("tone") in TONE else None
         q = src.try_quote(etf)
@@ -170,15 +171,17 @@ def _cards(tagged: dict, reads: dict | None, waiting: bool) -> str:
         tone_html = f'<span class="amb-pill {TONE[tone]}">{tone}</span>' if tone else ""
         count = f"{n} headline" + ("s" if n != 1 else "")
         if not n:
-            line = "No headlines in the last 36 hours."
-        elif r:
-            line = T.esc(r.get("read", ""))
-        elif waiting:
-            line = '<span style="color:var(--muted)">AI read on its way…</span>'
-        else:  # no AI read: the newest headline of the sector instead
-            line = f'<span style="color:var(--muted)">Latest:</span> {T.esc(tagged[name][0]["title"])}'
+            body = "<p>No headlines in the last 36 hours.</p>"
+        else:
+            if r:
+                read = f'<p>{T.esc(r.get("read", ""))}</p>'
+            elif waiting:
+                read = '<div class="wait"><span class="amb-spin"></span>Writing the AI read…</div>'
+            else:
+                read = ""
+            body = read + f'<div class="latest"><b>Latest</b>{T.esc(items[0]["title"])}</div>'
         pct = T.pill(q["pct"]) if q else ""
         cards.append(
             f'<div class="amb-sector{sel}"{T.go_attr("s:" + name)}><div class="top"><span class="nm">{T.esc(name)}</span>{pct}</div>'
-            f'<div class="meta">{tone_html}<span>{count} · {etf}</span></div><p>{line}</p></div>')
+            f'<div class="meta">{tone_html}<span>{count} · {etf}</span></div>{body}</div>')
     return '<div class="amb-grid g3 stack">' + "".join(cards) + "</div>"
